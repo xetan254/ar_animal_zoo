@@ -1,0 +1,14 @@
+bear
+camel
+capybara
+elephant
+giraffe
+hyena
+lemur
+leopard
+panda
+rhino
+tiger
+turtle
+warthog
+zebra

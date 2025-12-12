@@ -1,0 +1,58 @@
+name: ar_animal_zoo
+description: A new Flutter project.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- AI & Camera ---
+  flutter_vision: ^1.1.4
+  camera: ^0.10.5+9
+
+  # --- AR ---
+  ar_flutter_plugin: ^0.7.3
+
+  # --- Tiện ích ---
+  audioplayers: ^5.2.1
+  # Dùng bản mới nhất để fix lỗi Registrar
+  permission_handler: ^11.3.0
+  get: ^4.6.6
+  vector_math: ^2.1.4
+  image_picker: ^1.2.1
+  path_provider: ^2.1.5
+
+# QUAN TRỌNG: Thêm đoạn này để ép dùng bản mới
+dependency_overrides:
+  permission_handler: ^11.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/
+    - assets/audio/
+    - assets/tflite/
+    - assets/images/
+    - assets/models/bear.glb
+    - assets/models/camel.glb
+    - assets/models/capybara.glb
+    - assets/models/elephant.glb
+    - assets/models/giraffe.glb
+    - assets/models/hyena.glb
+    - assets/models/lemur.glb
+    - assets/models/leopard.glb
+    - assets/models/panda.glb
+    - assets/models/rhino.glb
+    - assets/models/tiger.glb
+    - assets/models/turtle.glb
+    - assets/models/warthog.glb
+    - assets/models/zebra.glb
