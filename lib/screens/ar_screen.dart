@@ -34,11 +34,15 @@ class _ARScreenState extends State<ARScreen> {
   ARObjectManager? arObjectManager;
   ARAnchorManager? arAnchorManager;
 
-  List<ARNode> nodes = [];
-  List<ARAnchor> anchors = [];
+  ARNode? currentNode;
+  ARPlaneAnchor? currentAnchor;
+
   final player = AudioPlayer();
   bool isLoading = false;
 
+  // --- BIẾN ĐIỀU KHIỂN ---
+  double currentScale = 0.2;
+  int modelVersion = 0;
   @override
   void dispose() {
     arSessionManager?.dispose();
@@ -49,7 +53,10 @@ class _ARScreenState extends State<ARScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.animal.name)),
+      appBar: AppBar(
+        title: Text(widget.animal.name),
+        backgroundColor: Colors.green,
+      ),
       body: Stack(
         children: [
           ARView(
@@ -74,6 +81,8 @@ class _ARScreenState extends State<ARScreen> {
                 ),
               ),
             ),
+
+          // Hướng dẫn
           Align(
             alignment: Alignment.topCenter,
             child: Container(
@@ -81,11 +90,71 @@ class _ARScreenState extends State<ARScreen> {
               padding: const EdgeInsets.all(8),
               color: Colors.black54,
               child: const Text(
-                "Chạm vào các chấm trắng để hiển thị",
+                "Chạm vào chấm trắng để đặt con vật.\nXoay bằng tay trên màn hình.",
                 style: TextStyle(color: Colors.white),
+                textAlign: TextAlign.center,
               ),
             ),
-          )
+          ),
+
+          // Control Panel - Chỉ có button +/- kích cỡ
+          Positioned(
+            bottom: 20,
+            left: 20,
+            right: 20,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Hiển thị giá trị kích cỡ
+                  Text(
+                    'Kích cỡ: ${(currentScale * 10).toStringAsFixed(1)}x',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Nút +/-
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton(
+                        onPressed: _decrementScale,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          minimumSize: const Size(60, 40),
+                        ),
+                        child: const Icon(Icons.remove,
+                            color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(width: 16),
+                      ElevatedButton(
+                        onPressed: _incrementScale,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          minimumSize: const Size(60, 40),
+                        ),
+                        child: const Icon(Icons.add,
+                            color: Colors.white, size: 20),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -106,26 +175,24 @@ class _ARScreenState extends State<ARScreen> {
       customPlaneTexturePath: "Images/triangle.png",
       showWorldOrigin: false,
       handleTaps: true,
+      handlePans: true,
+      handleRotation: true,
     );
 
     arObjectManager!.onInitialize();
-
     arSessionManager!.onPlaneOrPointTap = onPlaneOrPointTap;
   }
 
-  // Copy file to App Documents Directory
   Future<String> _copyAssetToLocal(String assetPath) async {
     final filename = assetPath.split('/').last;
     final directory = await getApplicationDocumentsDirectory();
     final localPath = '${directory.path}/$filename';
     final file = File(localPath);
 
-    // Always overwrite to ensure the file exists and is correct
     final data = await rootBundle.load(assetPath);
     final bytes = data.buffer.asUint8List();
     await file.writeAsBytes(bytes, flush: true);
 
-    // Return just the filename, not the full path
     return filename;
   }
 
@@ -136,41 +203,45 @@ class _ARScreenState extends State<ARScreen> {
         (hitTestResult) => hitTestResult.type == ARHitTestResultType.plane,
         orElse: () => hitTestResults.first);
 
+    if (currentAnchor != null) {
+      arAnchorManager!.removeAnchor(currentAnchor!);
+      currentAnchor = null;
+    }
+    if (currentNode != null) {
+      arObjectManager!.removeNode(currentNode!);
+      currentNode = null;
+    }
+
     var newAnchor =
         ARPlaneAnchor(transformation: singleHitTestResult.worldTransform);
     bool? didAddAnchor = await arAnchorManager!.addAnchor(newAnchor);
 
     if (didAddAnchor == true) {
-      anchors.add(newAnchor);
+      currentAnchor = newAnchor;
       setState(() {
         isLoading = true;
       });
 
       try {
-        // 1. Copy file and get filename
         String fileName = await _copyAssetToLocal(widget.animal.modelPath);
 
-        // 2. Create Node using fileSystemAppFolderGLB
         var newNode = ARNode(
-          type:
-              NodeType.fileSystemAppFolderGLB, // Use this type for local files
-          uri: fileName, // Only pass the filename, NOT the full path
-          scale:
-              vector.Vector3(0.1, 0.1, 0.1), // Scale down (models can be huge)
+          type: NodeType.fileSystemAppFolderGLB,
+          uri: fileName,
+          scale: vector.Vector3(currentScale, currentScale, currentScale),
           position: vector.Vector3(0.0, 0.0, 0.0),
-          rotation: vector.Vector4(1.0, 0.0, 0.0, 0.0),
         );
 
         bool? didAddNodeToAnchor =
             await arObjectManager!.addNode(newNode, planeAnchor: newAnchor);
         if (didAddNodeToAnchor == true) {
-          nodes.add(newNode);
+          currentNode = newNode;
           try {
             await player.play(AssetSource(
                 widget.animal.soundPath.replaceFirst('assets/', '')));
           } catch (_) {}
         } else {
-          arSessionManager!.onError("Failed to add node (Sceneform Error)");
+          arSessionManager!.onError("Failed to add node");
         }
       } catch (e) {
         arSessionManager!.onError("Error: $e");
@@ -178,6 +249,102 @@ class _ARScreenState extends State<ARScreen> {
         setState(() {
           isLoading = false;
         });
+      }
+    }
+  }
+
+  // --- HÀM ĐIỀU KHIỂN SCALE ---
+  void _incrementScale() {
+    setState(() {
+      if (currentScale < 1.0) {
+        currentScale += 0.1;
+        if (currentScale > 1.0) currentScale = 1.0;
+      }
+    });
+    _updateNodeScale();
+  }
+
+  void _decrementScale() {
+    setState(() {
+      if (currentScale > 0.05) {
+        currentScale -= 0.1;
+        if (currentScale < 0.05) currentScale = 0.05;
+      }
+    });
+    _updateNodeScale();
+  }
+
+// --- HÀM CẬP NHẬT SCALE CỦA NODE ---
+  Future<void> _updateNodeScale() async {
+    if (currentNode != null && currentAnchor != null) {
+      try {
+        // Xoá node cũ trước
+        await arObjectManager!.removeNode(currentNode!);
+        currentNode = null;
+
+        // Tạo lại node với scale mới
+        await _recreateNodeWithNewScale();
+      } catch (e) {
+        print("Error updating node: $e");
+      }
+    }
+  }
+
+  // --- HÀM TẠO LẠI NODE VỚI SCALE MỚI ---
+  Future<void> _recreateNodeWithNewScale() async {
+    if (currentAnchor != null) {
+      try {
+        // Xoá tất cả file cũ trong cache
+        final directory = await getApplicationDocumentsDirectory();
+        final baseFilename = widget.animal.modelPath.split('/').last;
+        final baseName = baseFilename.split('.').first;
+        final extension = baseFilename.split('.').last;
+
+        // Xoá tất cả phiên bản cũ
+        final dir = Directory(directory.path);
+        final files = dir.listSync();
+        for (var file in files) {
+          if (file is File && file.path.contains(baseName)) {
+            try {
+              await file.delete();
+              print("Deleted old file: ${file.path}");
+            } catch (_) {}
+          }
+        }
+
+        // Tăng version để tạo tên file mới
+        modelVersion++;
+        String newFileName = '${baseName}_v${modelVersion}.$extension';
+
+        // Copy file mới với tên unique
+        final localPath = '${directory.path}/$newFileName';
+        final newFile = File(localPath);
+
+        final data = await rootBundle.load(widget.animal.modelPath);
+        final bytes = data.buffer.asUint8List();
+        await newFile.writeAsBytes(bytes, flush: true);
+
+        print("Created new model file: $newFileName");
+
+        // Tạo node mới với scale mới
+        var newNode = ARNode(
+          type: NodeType.fileSystemAppFolderGLB,
+          uri: newFileName,
+          scale: vector.Vector3(currentScale, currentScale, currentScale),
+          position: vector.Vector3(0.0, 0.0, 0.0),
+          rotation: vector.Vector4(0.7071, 0.7071, 0, 0),
+        );
+
+        // Thêm node mới vào scene
+        bool? didAddNode = await arObjectManager!
+            .addNode(newNode, planeAnchor: currentAnchor!);
+        if (didAddNode == true) {
+          currentNode = newNode;
+          print(
+              "Node recreated - Scale: ${(currentScale * 10).toStringAsFixed(1)}x, Version: $modelVersion");
+        }
+      } catch (e) {
+        print("Error recreating node: $e");
       }
     }
   }
