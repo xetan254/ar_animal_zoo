@@ -37,12 +37,15 @@ class _ARScreenState extends State<ARScreen> {
   ARNode? currentNode;
   ARPlaneAnchor? currentAnchor;
 
+  // Biến lưu tên file cache để tránh copy nhiều lần
+  String? _cachedFileName;
+
   final player = AudioPlayer();
   bool isLoading = false;
 
   // --- BIẾN ĐIỀU KHIỂN ---
   double currentScale = 0.2;
-  int modelVersion = 0;
+
   @override
   void dispose() {
     arSessionManager?.dispose();
@@ -59,10 +62,13 @@ class _ARScreenState extends State<ARScreen> {
       ),
       body: Stack(
         children: [
+          // 1. Màn hình Camera AR
           ARView(
             onARViewCreated: onARViewCreated,
             planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
           ),
+
+          // 2. Loading Indicator
           if (isLoading)
             const Center(
               child: Card(
@@ -74,7 +80,7 @@ class _ARScreenState extends State<ARScreen> {
                     children: [
                       CircularProgressIndicator(color: Colors.white),
                       SizedBox(height: 10),
-                      Text("Đang tải mô hình...",
+                      Text("Đang xử lý...",
                           style: TextStyle(color: Colors.white)),
                     ],
                   ),
@@ -82,7 +88,7 @@ class _ARScreenState extends State<ARScreen> {
               ),
             ),
 
-          // Hướng dẫn
+          // 3. Hướng dẫn sử dụng
           Align(
             alignment: Alignment.topCenter,
             child: Container(
@@ -90,14 +96,14 @@ class _ARScreenState extends State<ARScreen> {
               padding: const EdgeInsets.all(8),
               color: Colors.black54,
               child: const Text(
-                "Chạm vào chấm trắng để đặt con vật.\nXoay bằng tay trên màn hình.",
+                "Chạm màn hình để đặt con vật.\nSử dụng nút bên dưới để đổi kích thước.",
                 style: TextStyle(color: Colors.white),
                 textAlign: TextAlign.center,
               ),
             ),
           ),
 
-          // Control Panel - Chỉ có button +/- kích cỡ
+          // 4. Control Panel - Điều khiển kích cỡ
           Positioned(
             bottom: 20,
             left: 20,
@@ -160,6 +166,7 @@ class _ARScreenState extends State<ARScreen> {
     );
   }
 
+  // --- KHỞI TẠO AR ---
   void onARViewCreated(
       ARSessionManager sessionManager,
       ARObjectManager objectManager,
@@ -175,27 +182,38 @@ class _ARScreenState extends State<ARScreen> {
       customPlaneTexturePath: "Images/triangle.png",
       showWorldOrigin: false,
       handleTaps: true,
-      handlePans: true,
-      handleRotation: true,
+      handlePans: true, // Cho phép di chuyển
+      handleRotation: true, // Cho phép xoay
     );
 
     arObjectManager!.onInitialize();
+
+    // Lắng nghe sự kiện chạm để đặt vật thể
     arSessionManager!.onPlaneOrPointTap = onPlaneOrPointTap;
   }
 
-  Future<String> _copyAssetToLocal(String assetPath) async {
+  // --- XỬ LÝ FILE (Copy 1 lần duy nhất) ---
+  Future<String> _getOrPrepareModelFile() async {
+    if (_cachedFileName != null) return _cachedFileName!;
+
+    final assetPath = widget.animal.modelPath;
     final filename = assetPath.split('/').last;
     final directory = await getApplicationDocumentsDirectory();
     final localPath = '${directory.path}/$filename';
     final file = File(localPath);
 
-    final data = await rootBundle.load(assetPath);
-    final bytes = data.buffer.asUint8List();
-    await file.writeAsBytes(bytes, flush: true);
+    // Kiểm tra xem file đã tồn tại chưa, nếu chưa thì mới copy
+    if (!await file.exists()) {
+      final data = await rootBundle.load(assetPath);
+      final bytes = data.buffer.asUint8List();
+      await file.writeAsBytes(bytes, flush: true);
+    }
 
+    _cachedFileName = filename;
     return filename;
   }
 
+  // --- XỬ LÝ CHẠM MÀN HÌNH ---
   Future<void> onPlaneOrPointTap(List<ARHitTestResult> hitTestResults) async {
     if (hitTestResults.isEmpty || isLoading) return;
 
@@ -203,148 +221,112 @@ class _ARScreenState extends State<ARScreen> {
         (hitTestResult) => hitTestResult.type == ARHitTestResultType.plane,
         orElse: () => hitTestResults.first);
 
+    // Xóa anchor cũ (nếu có) để đặt vị trí mới
     if (currentAnchor != null) {
       arAnchorManager!.removeAnchor(currentAnchor!);
       currentAnchor = null;
-    }
-    if (currentNode != null) {
-      arObjectManager!.removeNode(currentNode!);
       currentNode = null;
     }
 
+    // Tạo Anchor mới
     var newAnchor =
         ARPlaneAnchor(transformation: singleHitTestResult.worldTransform);
     bool? didAddAnchor = await arAnchorManager!.addAnchor(newAnchor);
 
     if (didAddAnchor == true) {
       currentAnchor = newAnchor;
-      setState(() {
-        isLoading = true;
-      });
+      await _addNodeToAnchor(newAnchor, playSound: true);
+    }
+  }
 
-      try {
-        String fileName = await _copyAssetToLocal(widget.animal.modelPath);
+  // --- HÀM THÊM NODE VÀO ANCHOR ---
+  Future<void> _addNodeToAnchor(ARPlaneAnchor anchor,
+      {bool playSound = false}) async {
+    setState(() {
+      isLoading = true;
+    });
 
-        var newNode = ARNode(
-          type: NodeType.fileSystemAppFolderGLB,
-          uri: fileName,
-          scale: vector.Vector3(currentScale, currentScale, currentScale),
-          position: vector.Vector3(0.0, 0.0, 0.0),
-        );
+    try {
+      String fileName = await _getOrPrepareModelFile();
 
-        bool? didAddNodeToAnchor =
-            await arObjectManager!.addNode(newNode, planeAnchor: newAnchor);
-        if (didAddNodeToAnchor == true) {
-          currentNode = newNode;
+      var newNode = ARNode(
+        type: NodeType.fileSystemAppFolderGLB,
+        uri: fileName,
+        scale: vector.Vector3(currentScale, currentScale, currentScale),
+        position: vector.Vector3(0.0, 0.0, 0.0),
+        rotation: vector.Vector4(0.7071, 0.7071, 0, 0), // Góc mặc định
+      );
+
+      bool? didAddNodeToAnchor =
+          await arObjectManager!.addNode(newNode, planeAnchor: anchor);
+
+      if (didAddNodeToAnchor == true) {
+        currentNode = newNode;
+        if (playSound) {
           try {
             await player.play(AssetSource(
                 widget.animal.soundPath.replaceFirst('assets/', '')));
           } catch (_) {}
-        } else {
-          arSessionManager!.onError("Failed to add node");
         }
-      } catch (e) {
-        arSessionManager!.onError("Error: $e");
-      } finally {
-        setState(() {
-          isLoading = false;
-        });
+      } else {
+        arSessionManager!.onError("Failed to add node");
       }
+    } catch (e) {
+      arSessionManager!.onError("Error: $e");
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
   // --- HÀM ĐIỀU KHIỂN SCALE ---
   void _incrementScale() {
-    setState(() {
-      if (currentScale < 1.0) {
+    if (currentScale < 1.0) {
+      setState(() {
         currentScale += 0.1;
         if (currentScale > 1.0) currentScale = 1.0;
-      }
-    });
-    _updateNodeScale();
-  }
-
-  void _decrementScale() {
-    setState(() {
-      if (currentScale > 0.05) {
-        currentScale -= 0.1;
-        if (currentScale < 0.05) currentScale = 0.05;
-      }
-    });
-    _updateNodeScale();
-  }
-
-// --- HÀM CẬP NHẬT SCALE CỦA NODE ---
-  Future<void> _updateNodeScale() async {
-    if (currentNode != null && currentAnchor != null) {
-      try {
-        // Xoá node cũ trước
-        await arObjectManager!.removeNode(currentNode!);
-        currentNode = null;
-
-        // Tạo lại node với scale mới
-        await _recreateNodeWithNewScale();
-      } catch (e) {
-        print("Error updating node: $e");
-      }
+      });
+      _refreshNodeWithNewScale();
     }
   }
 
-  // --- HÀM TẠO LẠI NODE VỚI SCALE MỚI ---
-  Future<void> _recreateNodeWithNewScale() async {
-    if (currentAnchor != null) {
+  void _decrementScale() {
+    if (currentScale > 0.05) {
+      setState(() {
+        currentScale -= 0.1;
+        if (currentScale < 0.05) currentScale = 0.05;
+      });
+      _refreshNodeWithNewScale();
+    }
+  }
+
+  // --- LOGIC LÀM MỚI NODE (GIỮ VỊ TRÍ) ---
+  Future<void> _refreshNodeWithNewScale() async {
+    // Chỉ làm mới nếu con vật đang hiển thị
+    if (currentAnchor != null && !isLoading) {
       try {
-        // Xoá tất cả file cũ trong cache
-        final directory = await getApplicationDocumentsDirectory();
-        final baseFilename = widget.animal.modelPath.split('/').last;
-        final baseName = baseFilename.split('.').first;
-        final extension = baseFilename.split('.').last;
+        // 1. Lưu lại vị trí (transformation) của anchor hiện tại
+        var savedTransform = currentAnchor!.transformation;
 
-        // Xoá tất cả phiên bản cũ
-        final dir = Directory(directory.path);
-        final files = dir.listSync();
-        for (var file in files) {
-          if (file is File && file.path.contains(baseName)) {
-            try {
-              await file.delete();
-              print("Deleted old file: ${file.path}");
-            } catch (_) {}
-          }
-        }
+        // 2. XÓA HOÀN TOÀN ANCHOR CŨ
+        // Việc này đảm bảo node cũ biến mất 100%, không bị chồng hình
+        await arAnchorManager!.removeAnchor(currentAnchor!);
+        currentAnchor = null;
+        currentNode = null;
 
-        // Tăng version để tạo tên file mới
-        modelVersion++;
-        String newFileName = '${baseName}_v${modelVersion}.$extension';
+        // 3. Tạo ngay một Anchor mới tại ĐÚNG VỊ TRÍ CŨ
+        var newAnchor = ARPlaneAnchor(transformation: savedTransform);
+        bool? didAdd = await arAnchorManager!.addAnchor(newAnchor);
 
-        // Copy file mới với tên unique
-        final localPath = '${directory.path}/$newFileName';
-        final newFile = File(localPath);
-
-        final data = await rootBundle.load(widget.animal.modelPath);
-        final bytes = data.buffer.asUint8List();
-        await newFile.writeAsBytes(bytes, flush: true);
-
-        print("Created new model file: $newFileName");
-
-        // Tạo node mới với scale mới
-        var newNode = ARNode(
-          type: NodeType.fileSystemAppFolderGLB,
-          uri: newFileName,
-          scale: vector.Vector3(currentScale, currentScale, currentScale),
-          position: vector.Vector3(0.0, 0.0, 0.0),
-          rotation: vector.Vector4(0.7071, 0.7071, 0, 0),
-        );
-
-        // Thêm node mới vào scene
-        bool? didAddNode = await arObjectManager!
-            .addNode(newNode, planeAnchor: currentAnchor!);
-        if (didAddNode == true) {
-          currentNode = newNode;
-          print(
-              "Node recreated - Scale: ${(currentScale * 10).toStringAsFixed(1)}x, Version: $modelVersion");
+        if (didAdd == true) {
+          currentAnchor = newAnchor;
+          // 4. Thêm lại model vào anchor mới với kích thước mới
+          // Model sẽ reset về góc xoay mặc định do plugin không hỗ trợ lấy góc xoay cũ
+          await _addNodeToAnchor(newAnchor, playSound: false);
         }
       } catch (e) {
-        print("Error recreating node: $e");
+        print("Error refreshing node: $e");
       }
     }
   }
