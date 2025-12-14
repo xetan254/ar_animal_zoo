@@ -23,7 +23,6 @@ dependencies:
   permission_handler: ^11.3.0
   get: ^4.6.6
   vector_math: ^2.1.4
-  image_picker: ^1.2.1
   path_provider: ^2.1.5
 
   # Firebase packages - Phiên bản ổn định

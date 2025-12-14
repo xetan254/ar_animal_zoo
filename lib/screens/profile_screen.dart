@@ -1,7 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:image_picker/image_picker.dart'; // Cần import package này
 import 'package:ar_animal_zoo/services/firebase_service.dart';
 import 'package:ar_animal_zoo/screens/auth_screen.dart';
 
@@ -20,41 +18,22 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _isUploading = false;
+  // Hàm tạo link avatar từ tên (Hoặc dùng link ảnh thật nếu có)
+  String _getAvatarUrl(User? user) {
+    if (user == null) return '';
 
-  // Hàm chọn ảnh và upload
-  Future<void> _pickAndUploadImage() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return; // Không cho sửa nếu chưa đăng nhập
-
-    final picker = ImagePicker();
-    // Chọn ảnh từ thư viện
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile != null) {
-      setState(() => _isUploading = true);
-
-      File file = File(pickedFile.path);
-      String? error = await FirebaseService().uploadAvatar(file);
-
-      setState(() => _isUploading = false);
-
-      if (mounted) {
-        if (error == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text("Cập nhật ảnh đại diện thành công!"),
-                backgroundColor: Colors.green),
-          );
-          // Gọi setState rỗng để UI vẽ lại ảnh mới (do user.photoURL đã đổi)
-          setState(() {});
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(error), backgroundColor: Colors.red),
-          );
-        }
-      }
+    // 1. Ưu tiên ảnh thật nếu user đã từng có (ví dụ ảnh từ Google Sign-In)
+    if (user.photoURL != null && user.photoURL!.isNotEmpty) {
+      return user.photoURL!;
     }
+
+    // 2. Nếu không có ảnh thật, dùng UI Avatars
+    // Lấy tên hiển thị, nếu null thì lấy "User"
+    String name = user.displayName ?? "User";
+    if (name.isEmpty) name = "User";
+
+    // Tạo link: encodeComponent để xử lý tên có dấu hoặc khoảng trắng
+    return "https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&background=random&color=fff&size=256";
   }
 
   @override
@@ -73,7 +52,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         String email = isLoggedIn
             ? (user.email ?? '')
             : 'Vui lòng đăng nhập để sử dụng đầy đủ tính năng';
-        String photoUrl = isLoggedIn ? (user.photoURL ?? '') : '';
+
+        // Lấy link ảnh đã xử lý
+        String finalAvatarUrl = _getAvatarUrl(user);
 
         return Scaffold(
           appBar: AppBar(
@@ -91,56 +72,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Center(
                   child: Column(
                     children: [
-                      Stack(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                    color: Colors.black26,
-                                    blurRadius: 10,
-                                    offset: Offset(0, 5)),
-                              ],
-                            ),
-                            child: _isUploading
-                                ? const CircleAvatar(
-                                    radius: 60,
-                                    child: CircularProgressIndicator())
-                                : CircleAvatar(
-                                    radius: 60,
-                                    backgroundImage: (isLoggedIn &&
-                                            photoUrl.isNotEmpty)
-                                        ? NetworkImage(photoUrl)
-                                        : null, // Nếu null thì dùng child bên dưới
-                                    child: (isLoggedIn && photoUrl.isNotEmpty)
-                                        ? null
-                                        : const Icon(Icons.person,
-                                            size: 60, color: Colors.grey),
-                                  ),
-                          ),
-                          // Nút Camera nhỏ để đổi ảnh (chỉ hiện khi đã đăng nhập)
-                          if (isLoggedIn)
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: GestureDetector(
-                                onTap: _pickAndUploadImage,
-                                child: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.blueAccent,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.camera_alt,
-                                      color: Colors.white, size: 20),
-                                ),
-                              ),
-                            ),
-                        ],
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: 10,
+                                offset: Offset(0, 5)),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          radius: 60,
+                          backgroundColor: Colors.grey[200],
+                          // Nếu đã login -> Load ảnh từ link (UI Avatar hoặc Google)
+                          // Nếu chưa login -> Hiện null để fallback xuống child icon
+                          backgroundImage:
+                              (isLoggedIn && finalAvatarUrl.isNotEmpty)
+                                  ? NetworkImage(finalAvatarUrl)
+                                  : null,
+                          child: (isLoggedIn && finalAvatarUrl.isNotEmpty)
+                              ? null
+                              : const Icon(Icons.person,
+                                  size: 60, color: Colors.grey),
+                        ),
                       ),
+
                       const SizedBox(height: 15),
                       Text(
                         displayName,
@@ -196,8 +155,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.smart_toy_outlined,
                         text: 'Chat Box AI',
                         color: Colors.blueAccent,
-                        isLoggedIn:
-                            true, // Chat có thể cho dùng thử hoặc bắt buộc login tùy bạn
+                        isLoggedIn: true,
                         onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -210,7 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.person_outline,
                         text: 'Thông tin cá nhân',
                         color: Colors.green,
-                        isLoggedIn: isLoggedIn, // Bắt buộc login
+                        isLoggedIn: isLoggedIn,
                         onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -221,7 +179,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.lock_outline,
                         text: 'Đổi mật khẩu',
                         color: Colors.orange,
-                        isLoggedIn: isLoggedIn, // Bắt buộc login
+                        isLoggedIn: isLoggedIn,
                         onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -232,7 +190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.info_outline,
                         text: 'Giới thiệu về ARZoo',
                         color: Colors.purple,
-                        isLoggedIn: true, // Ai cũng xem được
+                        isLoggedIn: true,
                         onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -240,14 +198,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Nút Đăng xuất (Chỉ hiện khi đã đăng nhập)
+                      // Nút Đăng xuất
                       if (isLoggedIn)
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: () async {
                               await FirebaseService().signOut();
-                              // Không cần navigator push vì StreamBuilder sẽ tự render lại giao diện Guest
                             },
                             icon: const Icon(Icons.logout),
                             label: const Text('Đăng xuất'),
@@ -279,14 +236,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required VoidCallback onTap,
     required bool isLoggedIn,
   }) {
-    // Nếu yêu cầu login mà chưa login thì làm mờ đi hoặc disable
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: ListTile(
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1), // Đã sửa lỗi deprecated
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: color),
@@ -296,9 +252,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w500,
-            color: isLoggedIn
-                ? Colors.black87
-                : Colors.grey, // Làm mờ text nếu chưa login
+            color: isLoggedIn ? Colors.black87 : Colors.grey,
           ),
         ),
         trailing:
