@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../data/zoo_data.dart';
@@ -38,6 +40,7 @@ class NewsArticle {
 class FirebaseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   // --- 0. LẤY DỮ LIỆU TỈNH THÀNH TỪ API ---
   Future<List<String>> getProvinces() async {
@@ -235,6 +238,36 @@ class FirebaseService {
         .collection('users')
         .doc(_auth.currentUser!.uid)
         .snapshots();
+  }
+
+  // --- 3. UPLOAD AVATAR ---
+  Future<String?> uploadAvatar(File imageFile) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return "Chưa đăng nhập";
+
+      // Tạo đường dẫn file: user_avatars/uid.jpg
+      final ref = _storage.ref().child('user_avatars/${user.uid}.jpg');
+
+      // Upload file
+      await ref.putFile(imageFile);
+
+      // Lấy link ảnh
+      final imageUrl = await ref.getDownloadURL();
+
+      // Cập nhật Profile Auth
+      await user.updatePhotoURL(imageUrl);
+
+      // Cập nhật Firestore (để đồng bộ dữ liệu nếu cần)
+      await _firestore.collection('users').doc(user.uid).update({
+        'photoUrl': imageUrl,
+      });
+
+      return null; // Thành công
+    } catch (e) {
+      debugPrint("Lỗi upload ảnh: $e");
+      return "Lỗi upload: $e";
+    }
   }
 
   // Cập nhật thông tin User

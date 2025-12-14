@@ -35,6 +35,7 @@ dependencies:
   cached_network_image: ^3.3.0 # Để load ảnh từ internet (tin tức) mượt hơn
   google_fonts: ^6.1.0
   google_sign_in: ^6.2.0
+  google_generative_ai: ^0.4.4
 # QUAN TRỌNG: Thêm đoạn này để ép dùng bản mới
 dependency_overrides:
   permission_handler: ^11.3.0
