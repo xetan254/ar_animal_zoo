@@ -1,17 +1,23 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'services/firebase_service.dart'; // Import service
+import 'screens/home_screen.dart';
+import 'screens/library_screen.dart';
 import 'screens/scan_screen.dart';
+import 'screens/news_screen.dart';
+import 'screens/profile_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await _requestPermission();
-  runApp(const MyApp());
-}
+  await Firebase.initializeApp(); // Khởi tạo Firebase
 
-Future<void> _requestPermission() async {
-  await Permission.camera.request();
-  await Permission.microphone.request();
+  // --- DÒNG LỆNH QUAN TRỌNG ---
+  // Chạy dòng này 1 lần để đẩy danh sách con vật lên Cloud, sau đó có thể comment lại
+  // await FirebaseService().seedData();
+  // -----------------------------
+
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -19,56 +25,54 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp(
-      title: 'AR Animal Zoo',
-      theme: ThemeData(primarySwatch: Colors.green, useMaterial3: true),
-      home: const HomeScreen(),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'AR Zoo',
+      theme: ThemeData(
+        primarySwatch: Colors.green,
+        useMaterial3: true,
+      ),
+      home: const MainContainer(),
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class MainContainer extends StatefulWidget {
+  const MainContainer({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<MainContainer> createState() => _MainContainerState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  int _selectedIndex = 0;
-
-  static final List<Widget> _widgetOptions = <Widget>[
+class _MainContainerState extends State<MainContainer> {
+  int _currentIndex = 0;
+  final List<Widget> _screens = [
+    const HomeScreen(),
+    const LibraryScreen(),
     const ScanScreen(),
-    const Center(
-      child: Text('Thư viện (Bạn tự triển khai ListView ở đây nhé)'),
-    ),
+    const NewsScreen(),
+    const ProfileScreen(),
   ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Vườn Thú Ảo AR')),
-      body: _widgetOptions.elementAt(_selectedIndex),
+      body: IndexedStack(index: _currentIndex, children: _screens),
       bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: Colors.green[700],
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Trang chủ'),
+          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Thư viện'),
           BottomNavigationBarItem(
-            icon: Icon(Icons.camera_alt),
-            label: 'Quét AI',
-          ),
+              icon: Icon(Icons.center_focus_strong, size: 32), label: 'Scan'),
           BottomNavigationBarItem(
-            icon: Icon(Icons.library_books),
-            label: 'Thư viện',
-          ),
+              icon: Icon(Icons.newspaper), label: 'Tin tức'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Cá nhân'),
         ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: Colors.green,
-        onTap: _onItemTapped,
       ),
     );
   }

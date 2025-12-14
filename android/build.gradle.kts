@@ -1,4 +1,12 @@
-// File: android/build.gradle.kts
+// --- 1. KHỐI PLUGINS (THÊM MỚI VÀO ĐẦU FILE) ---
+plugins {
+    // Phiên bản Gradle cho Android (bạn có thể chỉnh version nếu project yêu cầu khác)
+    id("com.android.application") version "8.11.1" apply false
+    // Phiên bản Kotlin
+    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    // Plugin Google Services (Firebase) - ĐÂY LÀ CÁI BẠN CẦN
+    id("com.google.gms.google-services") version "4.4.0" apply false
+}
 
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -19,7 +27,6 @@ subprojects {
 
     afterEvaluate {
         // --- FIX 1: ÉP ĐỒNG BỘ JAVA 17 CHO CẢ JAVA VÀ KOTLIN ---
-        // (Để xử lý các thư viện CameraX mới nhất)
         val android = subProject.extensions.findByName("android")
         if (android != null) {
             try {
@@ -27,7 +34,7 @@ subprojects {
                 compileOptions.javaClass.getMethod("setSourceCompatibility", JavaVersion::class.java).invoke(compileOptions, JavaVersion.VERSION_17)
                 compileOptions.javaClass.getMethod("setTargetCompatibility", JavaVersion::class.java).invoke(compileOptions, JavaVersion.VERSION_17)
             } catch (e: Exception) {
-                subProject.tasks.withType(JavaCompile::class.java).configureEach {
+                 subProject.tasks.withType(JavaCompile::class.java).configureEach {
                     sourceCompatibility = JavaVersion.VERSION_17.toString()
                     targetCompatibility = JavaVersion.VERSION_17.toString()
                 }
@@ -48,7 +55,7 @@ subprojects {
         applyFix(subProject, "io.carius.lars.ar_flutter_plugin", "io.carmine.ar_flutter_plugin")
     }
 
-    // CASE B: Flutter Vision (Thêm đoạn này để fix lỗi hiện tại của bạn)
+    // CASE B: Flutter Vision
     if (subProject.name == "flutter_vision") {
         applyFix(subProject, "com.vladih.computer_vision.flutter_vision", "com.vladih.computer_vision.flutter_vision")
     }
@@ -56,11 +63,9 @@ subprojects {
 
 // Hàm xử lý chung: Xóa package trong Manifest và Set Namespace trong Gradle
 fun applyFix(project: Project, oldPackageName: String, newNamespace: String) {
-    // 1. Chạy ngay nếu project đã load xong
     if (project.state.executed) {
         doFixLogic(project, oldPackageName, newNamespace)
     } else {
-        // 2. Hoặc đợi load xong thì chạy
         project.afterEvaluate {
             doFixLogic(project, oldPackageName, newNamespace)
         }
@@ -75,7 +80,6 @@ fun doFixLogic(project: Project, oldPackageName: String, newNamespace: String) {
         val manifestFile = project.file("src/main/AndroidManifest.xml")
         if (manifestFile.exists()) {
             var content = manifestFile.readText(Charsets.UTF_8)
-            // Tìm chuỗi package="xyz"
             val offendingString = "package=\"$oldPackageName\""
             
             if (content.contains(offendingString)) {

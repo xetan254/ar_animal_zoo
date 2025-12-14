@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "661645087712",
+    "project_id": "ar-zoo-ce5bc",
+    "storage_bucket": "ar-zoo-ce5bc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:661645087712:android:bf64430eadab9bf49ad185",
+        "android_client_info": {
+          "package_name": "com.example.ar_animal_zoo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSoAj0HM1WVKq8gnlLIl9LxSxmWt1kEWU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

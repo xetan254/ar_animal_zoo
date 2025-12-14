@@ -1,241 +1,264 @@
 // lib/data/zoo_data.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Animal {
-  final String id;
+  final String id; // ID trùng với nhãn AI (vd: 'elephant')
   final String name; // Tên tiếng Việt
-  final String englishName; // Tên tiếng Anh (khớp với label YOLO)
   final String scientificName; // Tên khoa học
-  final String category; // Phân loại
-  final String description; // Mô tả chi tiết
+  final String diet; // Chế độ ăn
   final String habitat; // Môi trường sống
-  final String imagePath; // Đường dẫn ảnh 2D
-  final String modelPath; // Đường dẫn model 3D (.glb)
-  final String soundPath; // Đường dẫn file âm thanh
-  final int yoloClassId; // ID class của YOLO
+  final String lifespan; // Tuổi thọ
+  final String conservationStatus; // Tình trạng bảo tồn
+  final String description; // Mô tả chi tiết
+  final String imagePath; // Đường dẫn ảnh (local asset)
+  final String modelPath; // Đường dẫn 3D (local asset)
+  final String soundPath; // Đường dẫn âm thanh (local asset)
 
-  const Animal({
+  Animal({
     required this.id,
     required this.name,
-    required this.englishName,
     required this.scientificName,
-    required this.category,
-    required this.description,
+    required this.diet,
     required this.habitat,
+    required this.lifespan,
+    required this.conservationStatus,
+    required this.description,
     required this.imagePath,
     required this.modelPath,
     required this.soundPath,
-    required this.yoloClassId,
   });
-}
 
-class ZooData {
-  static const List<Animal> animals = [
-    Animal(
-      id: 'bear',
-      name: 'Gấu',
-      englishName: 'Bear',
-      scientificName: 'Ursidae',
-      category: 'Thú',
-      description:
-          'Gấu là loài động vật to lớn, có bộ lông dày. Chúng có thể đứng bằng hai chân sau và rất thích ăn mật ong, cá hoặc quả mọng.',
-      habitat: 'Rừng & Núi tuyết',
-      imagePath: 'assets/images/bear.jpg',
-      modelPath: 'assets/models/bear.glb',
-      soundPath: 'assets/audio/bear_growl.mp3',
-      yoloClassId: 0,
-    ),
-    Animal(
-      id: 'camel',
-      name: 'Lạc Đà',
-      englishName: 'Camel',
-      scientificName: 'Camelus',
-      category: 'Thú',
-      description:
-          'Lạc đà được mệnh danh là "con tàu của sa mạc". Cái bướu trên lưng giúp chúng dự trữ mỡ để sống sót nhiều ngày không cần nước.',
-      habitat: 'Sa mạc',
-      imagePath: 'assets/images/camel.jpg',
-      modelPath: 'assets/models/camel.glb',
-      soundPath: 'assets/audio/camel_sound.mp3',
-      yoloClassId: 1,
-    ),
-    Animal(
-      id: 'capybara',
-      name: 'Chuột Lang Nước',
-      englishName: 'Capybara',
-      scientificName: 'Hydrochoerus hydrochaeris',
-      category: 'Thú',
-      description:
-          'Đây là loài gặm nhấm lớn nhất thế giới. Capybara rất thân thiện, bơi giỏi và thường để các loài vật khác ngồi lên lưng mình.',
-      habitat: 'Đầm lầy & Ven sông',
-      imagePath: 'assets/images/capybara.jpg',
-      modelPath: 'assets/models/capybara.glb',
-      soundPath: 'assets/audio/capybara_sound.mp3',
-      yoloClassId: 2,
-    ),
-    Animal(
-      id: 'elephant',
-      name: 'Voi',
-      englishName: 'Elephant',
-      scientificName: 'Elephantidae',
-      category: 'Thú',
-      description:
-          'Voi là động vật trên cạn lớn nhất hành tinh. Chiếc vòi dài giúp chúng cầm nắm, uống nước và giao tiếp với đồng loại.',
-      habitat: 'Rừng nhiệt đới & Thảo nguyên',
-      imagePath: 'assets/images/elephant.jpg',
-      modelPath: 'assets/models/elephant.glb',
-      soundPath: 'assets/audio/elephant_trumpet.mp3',
-      yoloClassId: 3,
-    ),
-    Animal(
-      id: 'giraffe',
-      name: 'Hươu Cao Cổ',
-      englishName: 'Giraffe',
-      scientificName: 'Giraffa',
-      category: 'Thú',
-      description:
-          'Hươu cao cổ là động vật cao nhất trên cạn. Cổ dài giúp chúng ăn lá cây trên ngọn cao mà các loài khác không với tới.',
-      habitat: 'Thảo nguyên Savanna',
-      imagePath: 'assets/images/giraffe.jpg',
-      modelPath: 'assets/models/giraffe.glb',
-      soundPath: 'assets/audio/giraffe_sound.mp3',
-      yoloClassId: 4,
-    ),
-    Animal(
-      id: 'hyena',
-      name: 'Linh Cẩu',
-      englishName: 'Hyena',
-      scientificName: 'Hyaenidae',
-      category: 'Thú',
-      description:
-          'Linh cẩu là loài săn mồi cơ hội, sống theo bầy đàn. Tiếng kêu của chúng đôi khi nghe giống như tiếng cười man dại.',
-      habitat: 'Đồng cỏ Châu Phi',
-      imagePath: 'assets/images/hyena.jpg',
-      modelPath: 'assets/models/hyena.glb',
-      soundPath: 'assets/audio/hyena_laugh.mp3',
-      yoloClassId: 5,
-    ),
-    Animal(
-      id: 'lemur',
-      name: 'Vượn Cáo',
-      englishName: 'Lemur',
-      scientificName: 'Lemuroidea',
-      category: 'Thú',
-      description:
-          'Vượn cáo chỉ sống ở đảo Madagascar. Chúng có đôi mắt to tròn, đuôi dài sọc đen trắng và rất thích tắm nắng vào buổi sáng.',
-      habitat: 'Rừng mưa nhiệt đới',
-      imagePath: 'assets/images/lemur.jpg',
-      modelPath: 'assets/models/lemur.glb',
-      soundPath: 'assets/audio/lemur_sound.mp3',
-      yoloClassId: 6,
-    ),
-    Animal(
-      id: 'leopard',
-      name: 'Báo Hoa Mai',
-      englishName: 'Leopard',
-      scientificName: 'Panthera pardus',
-      category: 'Thú',
-      description:
-          'Báo hoa mai là bậc thầy leo trèo. Chúng thường tha con mồi lên cây để tránh bị linh cẩu hoặc sư tử cướp mất.',
-      habitat: 'Rừng & Đồng cỏ',
-      imagePath: 'assets/images/leopard.jpg',
-      modelPath: 'assets/models/leopard.glb',
-      soundPath: 'assets/audio/leopard_growl.mp3',
-      yoloClassId: 7,
-    ),
-    Animal(
-      id: 'panda',
-      name: 'Gấu Trúc',
-      englishName: 'Panda',
-      scientificName: 'Ailuropoda melanoleuca',
-      category: 'Thú',
-      description:
-          'Gấu trúc là biểu tượng của Trung Quốc. Dù thuộc họ gấu nhưng 99% thức ăn của chúng là tre và trúc.',
-      habitat: 'Rừng tre núi cao',
-      imagePath: 'assets/images/panda.jpg',
-      modelPath: 'assets/models/panda.glb',
-      soundPath: 'assets/audio/panda_sound.mp3',
-      yoloClassId: 8,
-    ),
-    Animal(
-      id: 'rhino',
-      name: 'Tê Giác',
-      englishName: 'Rhino',
-      scientificName: 'Rhinocerotidae',
-      category: 'Thú',
-      description:
-          'Tê giác có lớp da dày như áo giáp và chiếc sừng lớn trên mũi. Chúng trông dữ tợn nhưng thực ra lại ăn cỏ.',
-      habitat: 'Đồng cỏ & Bụi rậm',
-      imagePath: 'assets/images/rhino.jpg',
-      modelPath: 'assets/models/rhino.glb',
-      soundPath: 'assets/audio/rhino_sound.mp3',
-      yoloClassId: 9,
-    ),
-    Animal(
-      id: 'tiger',
-      name: 'Hổ',
-      englishName: 'Tiger',
-      scientificName: 'Panthera tigris',
-      category: 'Thú',
-      description:
-          'Hổ là chúa tể sơn lâm. Bộ lông vằn giúp chúng ngụy trang trong cỏ cao để rình mồi. Hổ bơi rất giỏi.',
-      habitat: 'Rừng rậm',
-      imagePath: 'assets/images/tiger.jpg',
-      modelPath: 'assets/models/tiger.glb',
-      soundPath: 'assets/audio/tiger_roar.mp3',
-      yoloClassId: 10,
-    ),
-    Animal(
-      id: 'turtle',
-      name: 'Rùa',
-      englishName: 'Turtle',
-      scientificName: 'Testudines',
-      category: 'Bò sát',
-      description:
-          'Rùa có cái mai cứng bảo vệ cơ thể. Chúng di chuyển chậm chạp nhưng sống rất thọ, có loài sống hơn 100 năm.',
-      habitat: 'Đại dương hoặc Ao hồ',
-      imagePath: 'assets/images/turtle.jpg',
-      modelPath: 'assets/models/turtle.glb',
-      soundPath: 'assets/audio/turtle_sound.mp3',
-      yoloClassId: 11,
-    ),
-    Animal(
-      id: 'warthog',
-      name: 'Lợn Bướu',
-      englishName: 'Warthog',
-      scientificName: 'Phacochoerus',
-      category: 'Thú',
-      description:
-          'Lợn bướu có cặp răng nanh cong ngược lên trên. Nhân vật Pumbaa trong vua sư tử chính là một chú lợn bướu.',
-      habitat: 'Đồng cỏ Savanna',
-      imagePath: 'assets/images/warthog.jpg',
-      modelPath: 'assets/models/warthog.glb',
-      soundPath: 'assets/audio/warthog_sound.mp3',
-      yoloClassId: 12,
-    ),
-    Animal(
-      id: 'zebra',
-      name: 'Ngựa Vằn',
-      englishName: 'Zebra',
-      scientificName: 'Equus quagga',
-      category: 'Thú',
-      description:
-          'Ngựa vằn nổi bật với bộ lông sọc đen trắng. Không có hai con ngựa vằn nào có sọc giống hệt nhau.',
-      habitat: 'Đồng cỏ Châu Phi',
-      imagePath: 'assets/images/zebra.jpg',
-      modelPath: 'assets/models/zebra.glb',
-      soundPath: 'assets/audio/zebra_sound.mp3',
-      yoloClassId: 13,
-    ),
-  ];
+  // Chuyển dữ liệu từ Firebase về Object
+  factory Animal.fromMap(Map<String, dynamic> data) {
+    return Animal(
+      id: data['id'] ?? '',
+      name: data['name'] ?? '',
+      scientificName: data['scientificName'] ?? 'Chưa cập nhật',
+      diet: data['diet'] ?? 'Chưa cập nhật',
+      habitat: data['habitat'] ?? 'Chưa cập nhật',
+      lifespan: data['lifespan'] ?? 'Chưa cập nhật',
+      conservationStatus: data['conservationStatus'] ?? 'Không rõ',
+      description: data['description'] ?? '',
+      imagePath: data['imagePath'] ?? '',
+      modelPath: data['modelPath'] ?? '',
+      soundPath: data['soundPath'] ?? '',
+    );
+  }
 
-  /// Tìm con vật dựa trên Label trả về từ YOLO (so sánh với englishName)
-  static Animal? getAnimalByLabel(String label) {
-    try {
-      return animals.firstWhere(
-        (animal) => animal.englishName.toLowerCase() == label.toLowerCase(),
-      );
-    } catch (e) {
-      return null;
-    }
+  // Chuyển Object thành JSON để đẩy lên Firebase
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'scientificName': scientificName,
+      'diet': diet,
+      'habitat': habitat,
+      'lifespan': lifespan,
+      'conservationStatus': conservationStatus,
+      'description': description,
+      'imagePath': imagePath,
+      'modelPath': modelPath,
+      'soundPath': soundPath,
+    };
   }
 }
+
+// --- DỮ LIỆU GỐC (Dùng để Upload lên Firebase 1 lần) ---
+List<Animal> zooAnimals = [
+  Animal(
+    id: "elephant",
+    name: "Voi Châu Phi",
+    scientificName: "Loxodonta africana",
+    diet: "Thực vật (Cỏ, lá, cành cây)",
+    habitat: "Savan, Rừng thưa, Sa mạc",
+    lifespan: "60 - 70 năm",
+    conservationStatus: "Nguy cấp (EN)",
+    description:
+        "Voi là động vật có vú lớn nhất trên cạn. Chúng có đôi tai lớn hình quạt giúp tỏa nhiệt và chiếc vòi đa năng.",
+    imagePath: "assets/images/elephant.jpg",
+    modelPath: "assets/models/elephant.glb",
+    soundPath: "assets/audio/elephant_trumpet.mp3",
+  ),
+  Animal(
+    id: "tiger",
+    name: "Hổ Bengal",
+    scientificName: "Panthera tigris tigris",
+    diet: "Động vật ăn thịt (Hươu, lợn rừng...)",
+    habitat: "Rừng nhiệt đới, Rừng ngập mặn",
+    lifespan: "15 - 20 năm",
+    conservationStatus: "Nguy cấp (EN)",
+    description:
+        "Hổ là loài lớn nhất trong họ Mèo. Với bộ lông màu cam rực rỡ và những sọc đen đặc trưng, chúng là những kẻ săn mồi dũng mãnh.",
+    imagePath: "assets/images/tiger.jpg",
+    modelPath: "assets/models/tiger.glb",
+    soundPath: "assets/audio/tiger_roar.mp3",
+  ),
+  Animal(
+    id: "bear",
+    name: "Gấu Nâu",
+    scientificName: "Ursus arctos",
+    diet: "Ăn tạp (Cá, quả mọng, mật ong, thú nhỏ)",
+    habitat: "Rừng núi, Thung lũng",
+    lifespan: "20 - 30 năm",
+    conservationStatus: "Ít quan tâm (LC)",
+    description:
+        "Gấu nâu có khứu giác cực kỳ nhạy bén. Dù to lớn, chúng có thể chạy với tốc độ lên tới 48 km/h.",
+    imagePath: "assets/images/bear.jpg",
+    modelPath: "assets/models/bear.glb",
+    soundPath: "assets/audio/bear_growl.mp3",
+  ),
+  Animal(
+    id: "zebra",
+    name: "Ngựa Vằn",
+    scientificName: "Equus quagga",
+    diet: "Thực vật (Cỏ bụi)",
+    habitat: "Đồng cỏ Savan",
+    lifespan: "20 - 25 năm",
+    conservationStatus: "Sắp bị đe dọa (NT)",
+    description:
+        "Mỗi con ngựa vằn có hoa văn sọc độc nhất vô nhị. Chúng thường đi theo đàn lớn để tránh kẻ thù.",
+    imagePath: "assets/images/zebra.jpg",
+    modelPath: "assets/models/zebra.glb",
+    soundPath: "assets/audio/zebra_sound.mp3",
+  ),
+  Animal(
+    id: "giraffe",
+    name: "Hươu Cao Cổ",
+    scientificName: "Giraffa camelopardalis",
+    diet: "Thực vật (Lá cây keo)",
+    habitat: "Savan, Rừng thưa",
+    lifespan: "25 năm",
+    conservationStatus: "Dễ bị tổn thương (VU)",
+    description:
+        "Là động vật cao nhất thế giới. Lưỡi của chúng dài tới 45cm và có màu xanh tím để tránh bị cháy nắng.",
+    imagePath: "assets/images/giraffe.jpg",
+    modelPath: "assets/models/giraffe.glb",
+    soundPath: "assets/audio/giraffe_sound.mp3",
+  ),
+  Animal(
+    id: "leopard",
+    name: "Báo Đốm",
+    scientificName: "Panthera pardus",
+    diet: "Động vật ăn thịt",
+    habitat: "Rừng mưa, Savan",
+    lifespan: "12 - 17 năm",
+    conservationStatus: "Dễ bị tổn thương (VU)",
+    description:
+        "Báo đốm leo trèo rất giỏi. Chúng thường tha con mồi lên cây để ăn nhằm tránh bị sư tử hay linh cẩu cướp mất.",
+    imagePath: "assets/images/leopard.jpg",
+    modelPath: "assets/models/leopard.glb",
+    soundPath: "assets/audio/leopard_growl.mp3",
+  ),
+  Animal(
+    id: "rhino",
+    name: "Tê Giác Trắng",
+    scientificName: "Ceratotherium simum",
+    diet: "Thực vật (Cỏ)",
+    habitat: "Đồng cỏ, Savan",
+    lifespan: "40 - 50 năm",
+    conservationStatus: "Sắp bị đe dọa (NT)",
+    description:
+        "Tê giác có lớp da dày như áo giáp. Sừng của chúng được cấu tạo từ keratin, giống như tóc và móng tay người.",
+    imagePath: "assets/images/rhino.jpg",
+    modelPath: "assets/models/rhino.glb",
+    soundPath: "assets/audio/rhino_sound.mp3",
+  ),
+  Animal(
+    id: "panda",
+    name: "Gấu Trúc Lớn",
+    scientificName: "Ailuropoda melanoleuca",
+    diet: "Thực vật (Tre, trúc)",
+    habitat: "Rừng trúc núi cao (Trung Quốc)",
+    lifespan: "20 năm (hoang dã)",
+    conservationStatus: "Dễ bị tổn thương (VU)",
+    description:
+        "Gấu trúc dành 14 tiếng mỗi ngày chỉ để ăn. Chúng có một 'ngón tay cái giả' giúp cầm nắm thân tre dễ dàng.",
+    imagePath: "assets/images/panda.JPG",
+    modelPath: "assets/models/panda.glb",
+    soundPath: "assets/audio/panda_sound.mp3",
+  ),
+  Animal(
+    id: "camel",
+    name: "Lạc Đà Một Bướu",
+    scientificName: "Camelus dromedarius",
+    diet: "Thực vật (Cây bụi, xương rồng)",
+    habitat: "Sa mạc",
+    lifespan: "40 năm",
+    conservationStatus: "Đã được thuần hóa",
+    description:
+        "Lạc đà có thể uống 100 lít nước trong 10 phút. Bướu của chúng chứa mỡ để chuyển hóa thành năng lượng và nước.",
+    imagePath: "assets/images/camel.jpg",
+    modelPath: "assets/models/camel.glb",
+    soundPath: "assets/audio/camel_sound.mp3",
+  ),
+  Animal(
+    id: "capybara",
+    name: "Chuột Lang Nước",
+    scientificName: "Hydrochoerus hydrochaeris",
+    diet: "Thực vật (Cỏ, thực vật thủy sinh)",
+    habitat: "Đầm lầy, ven sông (Nam Mỹ)",
+    lifespan: "8 - 10 năm",
+    conservationStatus: "Ít quan tâm (LC)",
+    description:
+        "Là loài gặm nhấm lớn nhất thế giới. Chúng rất hiền lành và thường để các loài chim đậu trên lưng.",
+    imagePath: "assets/images/capybara.jpg",
+    modelPath: "assets/models/capybara.glb",
+    soundPath: "assets/audio/capybara_sound.mp3",
+  ),
+  Animal(
+    id: "hyena",
+    name: "Linh Cẩu Đốm",
+    scientificName: "Crocuta crocuta",
+    diet: "Động vật ăn thịt",
+    habitat: "Savan, Bán hoang mạc",
+    lifespan: "12 năm",
+    conservationStatus: "Ít quan tâm (LC)",
+    description:
+        "Linh cẩu có lực cắn cực mạnh, có thể nghiền nát xương. Chúng sống theo chế độ mẫu hệ (con cái đầu đàn).",
+    imagePath: "assets/images/hyena.jpg",
+    modelPath: "assets/models/hyena.glb",
+    soundPath: "assets/audio/hyena_laugh.mp3",
+  ),
+  Animal(
+    id: "lemur",
+    name: "Vượn Cáo Đuôi Vòng",
+    scientificName: "Lemur catta",
+    diet: "Ăn tạp (Quả, lá, côn trùng)",
+    habitat: "Rừng Madagascar",
+    lifespan: "16 - 19 năm",
+    conservationStatus: "Nguy cấp (EN)",
+    description:
+        "Vượn cáo dùng chiếc đuôi dài có khoang đen trắng để giao tiếp và giữ thăng bằng. Chúng thích tắm nắng vào buổi sáng.",
+    imagePath: "assets/images/lemur.jpg",
+    modelPath: "assets/models/lemur.glb",
+    soundPath: "assets/audio/lemur_sound.mp3",
+  ),
+  Animal(
+    id: "turtle",
+    name: "Rùa Biển",
+    scientificName: "Chelonioidea",
+    diet: "Sứa, rong biển, cua",
+    habitat: "Đại dương",
+    lifespan: "50 - 100 năm",
+    conservationStatus: "Nguy cấp",
+    description:
+        "Rùa biển bơi lội rất giỏi nhưng phải lên mặt nước để thở. Rùa cái quay lại đúng bãi biển nơi mình sinh ra để đẻ trứng.",
+    imagePath: "assets/images/turtle.jpg",
+    modelPath: "assets/models/turtle.glb",
+    soundPath: "assets/audio/turtle_sound.mp3",
+  ),
+  Animal(
+    id: "warthog",
+    name: "Lợn Bướu",
+    scientificName: "Phacochoerus africanus",
+    diet: "Ăn tạp (Cỏ, rễ cây, xác thối)",
+    habitat: "Savan, Đồng cỏ",
+    lifespan: "15 năm",
+    conservationStatus: "Ít quan tâm (LC)",
+    description:
+        "Lợn bướu thường chạy với cái đuôi dựng đứng lên trời. Chúng sống trong các hang do loài khác đào bỏ lại.",
+    imagePath: "assets/images/warthog.jpg",
+    modelPath: "assets/models/warthog.glb",
+    soundPath: "assets/audio/warthog_sound.mp3",
+  ),
+];
