@@ -26,11 +26,15 @@ dependencies:
   image_picker: ^1.2.1
   path_provider: ^2.1.5
 
-  firebase_core: ^2.24.2
-  firebase_auth: ^4.16.0
-  cloud_firestore: ^4.15.5
+  # Firebase packages - Phiên bản ổn định
+  firebase_core: ^2.20.0
+  firebase_auth: ^4.10.0
+  cloud_firestore: ^4.12.0
+  firebase_storage: ^11.2.0
+  http: ^1.1.0
   cached_network_image: ^3.3.0 # Để load ảnh từ internet (tin tức) mượt hơn
   google_fonts: ^6.1.0
+  google_sign_in: ^6.2.0
 # QUAN TRỌNG: Thêm đoạn này để ép dùng bản mới
 dependency_overrides:
   permission_handler: ^11.3.0

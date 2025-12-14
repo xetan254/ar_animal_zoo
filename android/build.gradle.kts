@@ -22,6 +22,7 @@ val clean by tasks.registering(Delete::class) {
     delete(rootProject.layout.buildDirectory)
 }
 
+
 subprojects {
     val subProject = this
 

@@ -1,5 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../data/zoo_data.dart';
 
 // Model cho Tin tức
@@ -36,67 +39,175 @@ class FirebaseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // --- 0. LẤY DỮ LIỆU TỈNH THÀNH TỪ API ---
+  Future<List<String>> getProvinces() async {
+    try {
+      final response = await http
+          .get(Uri.parse('https://provinces.open-api.vn/api/?depth=1'))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((item) => item['name'] as String).toList();
+      } else {
+        debugPrint("❌ Error fetching provinces: ${response.statusCode}");
+        return [];
+      }
+    } catch (e) {
+      debugPrint("❌ Error fetching provinces: $e");
+      return [];
+    }
+  }
+
   // --- 1. QUẢN LÝ TÀI KHOẢN (AUTH) ---
 
-  // Đăng ký (Có Rollback: Xóa user nếu lưu thông tin thất bại)
+  // ✅ HÀM KIỂM TRA EMAIL ĐÃ TỒN TẠI TRONG FIRESTORE
+  Future<bool> isEmailExists(String email) async {
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: email.trim())
+          .get();
+      return snapshot.docs.isNotEmpty;
+    } catch (e) {
+      debugPrint("❌ Error checking email: $e");
+      return false;
+    }
+  }
+
+  // Đăng ký (Đổi age -> birthYear, location -> province)
   Future<String?> signUp({
     required String email,
     required String password,
     required String nickname,
-    required String age,
-    required String location,
+    required int birthYear,
+    required String province,
   }) async {
+    email = email.trim();
+
+    // ✅ BƯỚC 0: KIỂM TRA EMAIL ĐÃ TỒN TẠI CHƯA
+    try {
+      bool emailExists = await isEmailExists(email);
+      if (emailExists) {
+        debugPrint("❌ Email already exists: $email");
+        return "Email này đã được sử dụng.";
+      }
+      debugPrint("✅ Email is available: $email");
+    } catch (e) {
+      debugPrint("❌ Error checking email existence: $e");
+      return "Không thể kiểm tra email. Vui lòng thử lại.";
+    }
+
     UserCredential? userCredential;
     try {
+      debugPrint("📝 Starting registration for: $email");
+
       // B1: Tạo tài khoản Authentication
+      debugPrint("B1: Creating Auth account...");
       userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
+      final uid = userCredential.user?.uid;
+      debugPrint("✅ B1 Success - UID: $uid");
+
+      if (uid == null) {
+        throw Exception("Không thể lấy UID người dùng");
+      }
+
       // B2: Lưu thông tin chi tiết vào Firestore
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'uid': userCredential.user!.uid,
+      debugPrint("B2: Saving user data to Firestore...");
+      debugPrint(
+          "Data: {uid: $uid, email: $email, nickname: $nickname, birthYear: $birthYear, province: $province}");
+
+      await _firestore.collection('users').doc(uid).set({
+        'uid': uid,
         'email': email,
         'nickname': nickname,
-        'age': age,
-        'location': location,
-        'createdAt': FieldValue.serverTimestamp(),
+        'birthYear': birthYear,
+        'province': province,
+        'createdAt': DateTime.now().toIso8601String(),
+        'photoUrl': '',
         'favorites': [],
       });
 
+      debugPrint("✅ B2 Success - User data saved!");
+      debugPrint("✅ Registration completed successfully!");
       return null; // Thành công
     } on FirebaseAuthException catch (e) {
-      return _translateAuthError(e.code);
-    } catch (e) {
-      // QUAN TRỌNG: Nếu lỗi ở bước B2 (lưu Firestore), xóa tài khoản B1 đi
-      // để người dùng có thể đăng ký lại email này.
-      if (userCredential != null) {
-        await userCredential.user?.delete();
+      debugPrint("❌ Firebase Auth Error: ${e.code} - ${e.message}");
+      if (e.code == 'email-already-in-use') {
+        return "Email này đã được sử dụng.";
       }
-      return "Lỗi hệ thống: $e. Vui lòng thử lại.";
+
+      return _translateAuthError(e.code);
+    } on FirebaseException catch (e) {
+      debugPrint("❌ Firebase Error: ${e.code} - ${e.message}");
+      debugPrint("Details: ${e.toString()}");
+
+      // Rollback: Xóa tài khoản Auth nếu Firestore thất bại
+      if (userCredential != null) {
+        try {
+          await userCredential.user?.delete();
+          debugPrint("⚠️ Rollback: User account deleted");
+        } catch (deleteError) {
+          debugPrint("❌ Rollback failed: $deleteError");
+        }
+      }
+
+      return "Lỗi lưu dữ liệu: ${e.message}";
+    } catch (e) {
+      debugPrint("❌ Unexpected Error: ${e.runtimeType} - $e");
+      debugPrint("Stack trace: ${StackTrace.current}");
+
+      // Rollback: Xóa tài khoản Auth nếu Firestore thất bại
+      if (userCredential != null) {
+        try {
+          await userCredential.user?.delete();
+          debugPrint("⚠️ Rollback: User account deleted");
+        } catch (deleteError) {
+          debugPrint("❌ Rollback failed: $deleteError");
+        }
+      }
+
+      return "Lỗi hệ thống: $e";
     }
   }
 
   // Đăng nhập
-  Future<String?> signIn(
-      {required String email, required String password}) async {
+  Future<String?> signIn({
+    required String email,
+    required String password,
+  }) async {
     try {
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      debugPrint("✅ User signed in: $email");
       return null;
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-not-found' ||
-          e.code == 'wrong-password' ||
-          e.code == 'invalid-credential') {
-        return "Sai email hoặc mật khẩu.";
+      debugPrint("❌ Sign In Error: ${e.code}");
+
+      if (e.code == 'user-not-found') {
+        return "Email không tồn tại. Vui lòng đăng ký.";
+      } else if (e.code == 'wrong-password') {
+        return "Mật khẩu sai.";
+      } else if (e.code == 'invalid-credential') {
+        return "Email hoặc mật khẩu sai.";
       }
       return "Lỗi đăng nhập: ${e.code}";
+    } catch (e) {
+      debugPrint("❌ Sign In Error: $e");
+      return "Lỗi hệ thống. Vui lòng thử lại.";
     }
   }
 
   // Đăng xuất
   Future<void> signOut() async {
     await _auth.signOut();
+    debugPrint("✅ User signed out");
   }
 
   // Dịch mã lỗi sang tiếng Việt
@@ -108,6 +219,8 @@ class FirebaseService {
         return 'Địa chỉ email không hợp lệ.';
       case 'weak-password':
         return 'Mật khẩu quá yếu (cần > 6 ký tự).';
+      case 'operation-not-allowed':
+        return 'Tính năng này chưa được bật.';
       default:
         return 'Lỗi: $code';
     }
@@ -124,6 +237,28 @@ class FirebaseService {
         .snapshots();
   }
 
+  // Cập nhật thông tin User
+  Future<String?> updateUserProfile({
+    required String nickname,
+    required int birthYear,
+    required String province,
+  }) async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) return "Chưa đăng nhập";
+
+      await _firestore.collection('users').doc(uid).update({
+        'nickname': nickname,
+        'birthYear': birthYear,
+        'province': province,
+      });
+      debugPrint("✅ Profile updated");
+      return null;
+    } catch (e) {
+      return "Lỗi cập nhật: $e";
+    }
+  }
+
   // Lấy danh sách Động vật
   Stream<List<Animal>> getAnimalsStream() {
     return _firestore.collection('animals').snapshots().map((snapshot) {
@@ -131,27 +266,12 @@ class FirebaseService {
     });
   }
 
-  // Lấy danh sách Tin tức (Sắp xếp theo ngày mới nhất)
+  // Lấy danh sách Tin tức
   Stream<List<NewsArticle>> getNewsStream() {
-    return _firestore
-        .collection('news')
-        // .orderBy('date', descending: true) // Bỏ comment nếu muốn sắp xếp
-        .snapshots()
-        .map((snapshot) {
+    return _firestore.collection('news').snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
         return NewsArticle.fromMap(doc.id, doc.data());
       }).toList();
     });
-  }
-
-  // Upload dữ liệu mẫu (Chạy 1 lần)
-  Future<void> seedData() async {
-    final collection = _firestore.collection('animals');
-    var snapshot = await collection.limit(1).get();
-    if (snapshot.docs.isEmpty) {
-      for (var animal in zooAnimals) {
-        await collection.doc(animal.id).set(animal.toMap());
-      }
-    }
   }
 }

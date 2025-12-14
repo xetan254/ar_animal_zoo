@@ -1,4 +1,3 @@
-// lib/screens/auth_screen.dart
 import 'package:flutter/material.dart';
 import '../services/firebase_service.dart';
 
@@ -10,17 +9,35 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  bool isLogin = true; // Trạng thái: Đang ở màn Login hay Register
+  bool isLogin = true;
   bool isLoading = false;
+  bool isLoadingProvinces = false;
 
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nicknameController = TextEditingController();
-  final _ageController = TextEditingController();
-  final _locationController = TextEditingController();
+  final _birthYearController = TextEditingController();
+
+  String? _selectedProvince;
+  List<String> _provinces = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProvinces();
+  }
+
+  // Tải danh sách tỉnh thành
+  Future<void> _loadProvinces() async {
+    setState(() => isLoadingProvinces = true);
+    final provinces = await FirebaseService().getProvinces();
+    setState(() {
+      _provinces = provinces;
+      isLoadingProvinces = false;
+    });
+  }
 
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -36,13 +53,25 @@ class _AuthScreenState extends State<AuthScreen> {
         password: _passwordController.text.trim(),
       );
     } else {
-      error = await service.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        nickname: _nicknameController.text.trim(),
-        age: _ageController.text.trim(),
-        location: _locationController.text.trim(),
-      );
+      // Kiểm tra province được chọn
+      if (_selectedProvince == null) {
+        error = "Vui lòng chọn tỉnh/thành phố.";
+      } else {
+        int? birthYear = int.tryParse(_birthYearController.text.trim());
+        if (birthYear == null) {
+          error = "Năm sinh không hợp lệ.";
+        } else if (birthYear < 1900 || birthYear > DateTime.now().year) {
+          error = "Năm sinh phải từ 1900 đến năm hiện tại.";
+        } else {
+          error = await service.signUp(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+            nickname: _nicknameController.text.trim(),
+            birthYear: birthYear,
+            province: _selectedProvince!,
+          );
+        }
+      }
     }
 
     setState(() => isLoading = false);
@@ -50,7 +79,12 @@ class _AuthScreenState extends State<AuthScreen> {
     if (error != null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error), backgroundColor: Colors.red));
+        SnackBar(
+          content: Text(error),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     } else {
       // Đăng nhập/ĐK thành công -> Thoát màn hình này
       if (!mounted) return;
@@ -62,103 +96,189 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          title: Text(isLogin ? "Đăng Nhập" : "Đăng Ký"),
-          backgroundColor: Colors.green),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+        title: Text(isLogin ? 'Đăng nhập' : 'Đăng ký'),
+        backgroundColor: Colors.green,
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
           child: Form(
             key: _formKey,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
                 // Logo
                 const Icon(Icons.pets, size: 80, color: Colors.green),
                 const SizedBox(height: 20),
 
-                // Email Field
+                // Email
                 TextFormField(
                   controller: _emailController,
-                  decoration: const InputDecoration(
-                      labelText: "Email", prefixIcon: Icon(Icons.email)),
                   keyboardType: TextInputType.emailAddress,
-                  validator: (val) =>
-                      val!.contains('@') ? null : "Email không hợp lệ",
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true) return 'Vui lòng nhập email';
+                    if (!value!.contains('@')) return 'Email không hợp lệ';
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
-                // Password Field
+                // Password
                 TextFormField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(
-                      labelText: "Mật khẩu", prefixIcon: Icon(Icons.lock)),
                   obscureText: true,
-                  validator: (val) =>
-                      val!.length < 6 ? "Mật khẩu phải trên 6 ký tự" : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Mật khẩu',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true) return 'Vui lòng nhập mật khẩu';
+                    if (value!.length < 6) return 'Mật khẩu tối thiểu 6 ký tự';
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
-                // Các trường chỉ hiện khi Đăng ký
+                // Hiển thị form đăng ký nếu không phải login
                 if (!isLogin) ...[
+                  // Nickname
                   TextFormField(
                     controller: _nicknameController,
                     decoration: const InputDecoration(
-                        labelText: "Nickname (Tên hiển thị)",
-                        prefixIcon: Icon(Icons.person)),
-                    validator: (val) =>
-                        val!.isEmpty ? "Vui lòng nhập tên" : null,
+                      labelText: 'Tên hiển thị',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    validator: (value) {
+                      if (value?.isEmpty ?? true) return 'Vui lòng nhập tên';
+                      return null;
+                    },
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _ageController,
-                          decoration: const InputDecoration(
-                              labelText: "Tuổi", prefixIcon: Icon(Icons.cake)),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _locationController,
-                          decoration: const InputDecoration(
-                              labelText: "Nơi sống",
-                              prefixIcon: Icon(Icons.map)),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 12),
+
+                  // Năm sinh
+                  TextFormField(
+                    controller: _birthYearController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Năm sinh (VD: 2000)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.cake),
+                    ),
+                    validator: (value) {
+                      if (value?.isEmpty ?? true) {
+                        return 'Vui lòng nhập năm sinh';
+                      }
+                      int? year = int.tryParse(value!);
+                      if (year == null ||
+                          year < 1900 ||
+                          year > DateTime.now().year) {
+                        return 'Năm sinh không hợp lệ';
+                      }
+                      return null;
+                    },
                   ),
+                  const SizedBox(height: 12),
+
+                  // Tỉnh/Thành phố
+                  if (isLoadingProvinces)
+                    const SizedBox(
+                      height: 60,
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      initialValue: _selectedProvince,
+                      items: _provinces
+                          .map((province) => DropdownMenuItem(
+                                value: province,
+                                child: Text(province),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() => _selectedProvince = value);
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Tỉnh/Thành phố',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.location_on),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Vui lòng chọn tỉnh/thành phố';
+                        }
+                        return null;
+                      },
+                    ),
+                  const SizedBox(height: 12),
                 ],
 
-                const SizedBox(height: 30),
-
                 // Nút Submit
-                isLoading
-                    ? const CircularProgressIndicator()
-                    : ElevatedButton(
-                        onPressed: _submit,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          minimumSize: const Size(double.infinity, 50),
+                ElevatedButton(
+                  onPressed: isLoading ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    minimumSize: const Size(double.infinity, 50),
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Text(
+                          isLogin ? 'Đăng nhập' : 'Đăng ký',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        child: Text(isLogin ? "ĐĂNG NHẬP" : "ĐĂNG KÝ NGAY",
-                            style: const TextStyle(color: Colors.white)),
-                      ),
+                ),
+                const SizedBox(height: 16),
 
-                // Nút chuyển đổi chế độ
+                // Nút chuyển đổi
                 TextButton(
-                  onPressed: () => setState(() => isLogin = !isLogin),
-                  child: Text(isLogin
-                      ? "Chưa có tài khoản? Đăng ký ngay"
-                      : "Đã có tài khoản? Đăng nhập"),
-                )
+                  onPressed: () {
+                    setState(() {
+                      isLogin = !isLogin;
+                      _formKey.currentState?.reset();
+                      _selectedProvince = null;
+                    });
+                  },
+                  child: Text(
+                    isLogin
+                        ? 'Chưa có tài khoản? Đăng ký'
+                        : 'Đã có tài khoản? Đăng nhập',
+                    style: const TextStyle(color: Colors.green, fontSize: 14),
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nicknameController.dispose();
+    _birthYearController.dispose();
+    super.dispose();
   }
 }

@@ -1,5 +1,5 @@
 // lib/data/zoo_data.dart
-import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Animal {
   final String id; // ID trùng với nhãn AI (vd: 'elephant')

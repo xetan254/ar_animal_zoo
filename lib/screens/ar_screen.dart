@@ -1,4 +1,5 @@
 import 'dart:io';
+// import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
@@ -326,7 +327,7 @@ class _ARScreenState extends State<ARScreen> {
           await _addNodeToAnchor(newAnchor, playSound: false);
         }
       } catch (e) {
-        print("Error refreshing node: $e");
+        debugPrint("Error refreshing node: $e");
       }
     }
   }

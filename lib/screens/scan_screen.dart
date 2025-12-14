@@ -90,7 +90,7 @@ class _ScanScreenState extends State<ScanScreen> {
         }
       });
     } catch (e) {
-      print("Error starting stream: $e");
+      debugPrint("Error starting stream: $e");
     }
   }
 
