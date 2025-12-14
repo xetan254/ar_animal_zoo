@@ -78,7 +78,7 @@ class FirebaseService {
     }
   }
 
-  // Đăng ký (Đổi age -> birthYear, location -> province)
+  // Đăng ký
   Future<String?> signUp({
     required String email,
     required String password,
@@ -88,7 +88,6 @@ class FirebaseService {
   }) async {
     email = email.trim();
 
-    // ✅ BƯỚC 0: KIỂM TRA EMAIL ĐÃ TỒN TẠI CHƯA
     try {
       bool emailExists = await isEmailExists(email);
       if (emailExists) {
@@ -106,24 +105,17 @@ class FirebaseService {
       debugPrint("📝 Starting registration for: $email");
 
       // B1: Tạo tài khoản Authentication
-      debugPrint("B1: Creating Auth account...");
       userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
       final uid = userCredential.user?.uid;
-      debugPrint("✅ B1 Success - UID: $uid");
-
       if (uid == null) {
         throw Exception("Không thể lấy UID người dùng");
       }
 
       // B2: Lưu thông tin chi tiết vào Firestore
-      debugPrint("B2: Saving user data to Firestore...");
-      debugPrint(
-          "Data: {uid: $uid, email: $email, nickname: $nickname, birthYear: $birthYear, province: $province}");
-
       await _firestore.collection('users').doc(uid).set({
         'uid': uid,
         'email': email,
@@ -135,7 +127,6 @@ class FirebaseService {
         'favorites': [],
       });
 
-      debugPrint("✅ B2 Success - User data saved!");
       debugPrint("✅ Registration completed successfully!");
       return null; // Thành công
     } on FirebaseAuthException catch (e) {
@@ -143,37 +134,24 @@ class FirebaseService {
       if (e.code == 'email-already-in-use') {
         return "Email này đã được sử dụng.";
       }
-
       return _translateAuthError(e.code);
     } on FirebaseException catch (e) {
       debugPrint("❌ Firebase Error: ${e.code} - ${e.message}");
-      debugPrint("Details: ${e.toString()}");
-
-      // Rollback: Xóa tài khoản Auth nếu Firestore thất bại
+      // Rollback
       if (userCredential != null) {
         try {
           await userCredential.user?.delete();
-          debugPrint("⚠️ Rollback: User account deleted");
-        } catch (deleteError) {
-          debugPrint("❌ Rollback failed: $deleteError");
-        }
+        } catch (_) {}
       }
-
       return "Lỗi lưu dữ liệu: ${e.message}";
     } catch (e) {
       debugPrint("❌ Unexpected Error: ${e.runtimeType} - $e");
-      debugPrint("Stack trace: ${StackTrace.current}");
-
-      // Rollback: Xóa tài khoản Auth nếu Firestore thất bại
+      // Rollback
       if (userCredential != null) {
         try {
           await userCredential.user?.delete();
-          debugPrint("⚠️ Rollback: User account deleted");
-        } catch (deleteError) {
-          debugPrint("❌ Rollback failed: $deleteError");
-        }
+        } catch (_) {}
       }
-
       return "Lỗi hệ thống: $e";
     }
   }
@@ -192,14 +170,9 @@ class FirebaseService {
       return null;
     } on FirebaseAuthException catch (e) {
       debugPrint("❌ Sign In Error: ${e.code}");
-
-      if (e.code == 'user-not-found') {
-        return "Email không tồn tại. Vui lòng đăng ký.";
-      } else if (e.code == 'wrong-password') {
-        return "Mật khẩu sai.";
-      } else if (e.code == 'invalid-credential') {
-        return "Email hoặc mật khẩu sai.";
-      }
+      if (e.code == 'user-not-found') return "Email không tồn tại.";
+      if (e.code == 'wrong-password') return "Mật khẩu sai.";
+      if (e.code == 'invalid-credential') return "Email hoặc mật khẩu sai.";
       return "Lỗi đăng nhập: ${e.code}";
     } catch (e) {
       debugPrint("❌ Sign In Error: $e");
@@ -246,24 +219,16 @@ class FirebaseService {
       final user = _auth.currentUser;
       if (user == null) return "Chưa đăng nhập";
 
-      // Tạo đường dẫn file: user_avatars/uid.jpg
       final ref = _storage.ref().child('user_avatars/${user.uid}.jpg');
-
-      // Upload file
       await ref.putFile(imageFile);
-
-      // Lấy link ảnh
       final imageUrl = await ref.getDownloadURL();
-
-      // Cập nhật Profile Auth
       await user.updatePhotoURL(imageUrl);
 
-      // Cập nhật Firestore (để đồng bộ dữ liệu nếu cần)
       await _firestore.collection('users').doc(user.uid).update({
         'photoUrl': imageUrl,
       });
 
-      return null; // Thành công
+      return null;
     } catch (e) {
       debugPrint("Lỗi upload ảnh: $e");
       return "Lỗi upload: $e";
@@ -306,5 +271,55 @@ class FirebaseService {
         return NewsArticle.fromMap(doc.id, doc.data());
       }).toList();
     });
+  }
+
+  // --- 4. CÁC HÀM MỚI (FIX LỖI) ---
+
+  // ✅ [MỚI] Hàm lấy thú nổi bật (KHẮC PHỤC LỖI undefined_method)
+  Future<List<Map<String, dynamic>>> getFeaturedAnimals() async {
+    try {
+      final snapshot = await _firestore
+          .collection('animals')
+          .orderBy('likes', descending: true)
+          .limit(6)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': doc.id,
+          'name': data['name'] ?? 'Không tên',
+          'image': data['imagePath'] ?? '',
+          'likes': data['likes'] ?? 0,
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint("Lỗi lấy thú nổi bật: $e");
+      return [];
+    }
+  }
+
+  // ✅ [SỬA] Hàm lấy thời tiết theo tọa độ (Đã sửa lỗi cú pháp 'catch (e) {a')
+  Future<Map<String, dynamic>?> fetchWeather(double lat, double lon) async {
+    // ⚠️ Thay API Key của bạn vào đây
+    const apiKey = '73106710a0fed9e9783784aeed44bf93';
+
+    try {
+      final url = Uri.parse(
+          'https://api.openweathermap.org/data/2.5/weather?lat=$lat&lon=$lon&appid=$apiKey&units=metric&lang=vi');
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        debugPrint('Lỗi API thời tiết: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      // <-- Đã xóa chữ 'a' thừa ở đây
+      debugPrint('Lỗi gọi API thời tiết: $e');
+      return null;
+    }
   }
 }

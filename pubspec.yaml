@@ -23,6 +23,7 @@ dependencies:
   permission_handler: ^11.3.0
   get: ^4.6.6
   vector_math: ^2.1.4
+  image_picker: ^1.2.1
   path_provider: ^2.1.5
 
   # Firebase packages - Phiên bản ổn định
@@ -31,10 +32,11 @@ dependencies:
   cloud_firestore: ^5.4.4
   firebase_storage: ^12.3.0
   http: ^1.1.0
+  geolocator: ^9.0.2
   cached_network_image: ^3.3.0 # Để load ảnh từ internet (tin tức) mượt hơn
   google_fonts: ^6.1.0
   google_sign_in: ^6.2.0
-  google_generative_ai: ^0.4.4
+  google_generative_ai: ^0.4.6
 # QUAN TRỌNG: Thêm đoạn này để ép dùng bản mới
 dependency_overrides:
   permission_handler: ^11.3.0
