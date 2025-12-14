@@ -2,10 +2,11 @@
 plugins {
     // Phiên bản Gradle cho Android (bạn có thể chỉnh version nếu project yêu cầu khác)
     id("com.android.application") version "8.11.1" apply false
+    id("com.android.library") version "8.11.1" apply false
     // Phiên bản Kotlin
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
     // Plugin Google Services (Firebase) - ĐÂY LÀ CÁI BẠN CẦN
-    id("com.google.gms.google-services") version "4.4.0" apply false
+    id("com.google.gms.google-services") version "4.4.0" apply false 
 }
 
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
