@@ -5,9 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../data/zoo_data.dart';
+import '../data/zoo_data.dart'; // Đảm bảo model Animal của bạn ở đúng đường dẫn này
 
-// Model cho Tin tức
+// --- MODEL CHO TIN TỨC ---
 class NewsArticle {
   final String id;
   final String title;
@@ -37,12 +37,17 @@ class NewsArticle {
   }
 }
 
+// --- SERVICE CHÍNH ---
 class FirebaseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  // --- 0. LẤY DỮ LIỆU TỈNH THÀNH TỪ API ---
+  // ==========================================
+  // 0. API & TIỆN ÍCH KHÁC
+  // ==========================================
+
+  // Lấy danh sách tỉnh thành Việt Nam
   Future<List<String>> getProvinces() async {
     try {
       final response = await http
@@ -62,9 +67,34 @@ class FirebaseService {
     }
   }
 
-  // --- 1. QUẢN LÝ TÀI KHOẢN (AUTH) ---
+  // Lấy thời tiết theo tọa độ (OpenWeatherMap)
+  Future<Map<String, dynamic>?> fetchWeather(double lat, double lon) async {
+    // ⚠️ Thay API Key của bạn vào đây
+    const apiKey = '73106710a0fed9e9783784aeed44bf93';
 
-  // ✅ HÀM KIỂM TRA EMAIL ĐÃ TỒN TẠI TRONG FIRESTORE
+    try {
+      final url = Uri.parse(
+          'https://api.openweathermap.org/data/2.5/weather?lat=$lat&lon=$lon&appid=$apiKey&units=metric&lang=vi');
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        debugPrint('Lỗi API thời tiết: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Lỗi gọi API thời tiết: $e');
+      return null;
+    }
+  }
+
+  // ==========================================
+  // 1. QUẢN LÝ TÀI KHOẢN (AUTH)
+  // ==========================================
+
+  // Kiểm tra email đã tồn tại trong Firestore chưa
   Future<bool> isEmailExists(String email) async {
     try {
       final snapshot = await _firestore
@@ -78,7 +108,7 @@ class FirebaseService {
     }
   }
 
-  // Đăng ký
+  // Đăng ký tài khoản mới
   Future<String?> signUp({
     required String email,
     required String password,
@@ -89,93 +119,66 @@ class FirebaseService {
     email = email.trim();
 
     try {
+      // Kiểm tra trùng email logic nghiệp vụ
       bool emailExists = await isEmailExists(email);
       if (emailExists) {
-        debugPrint("❌ Email already exists: $email");
         return "Email này đã được sử dụng.";
       }
-      debugPrint("✅ Email is available: $email");
+
+      UserCredential? userCredential;
+      try {
+        // B1: Tạo tài khoản Auth
+        userCredential = await _auth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+
+        final uid = userCredential.user?.uid;
+        if (uid == null) throw Exception("Không thể lấy UID");
+
+        // B2: Lưu data vào Firestore
+        await _firestore.collection('users').doc(uid).set({
+          'uid': uid,
+          'email': email,
+          'nickname': nickname,
+          'birthYear': birthYear,
+          'province': province,
+          'createdAt': DateTime.now().toIso8601String(),
+          'photoUrl': '',
+          'favorites': [],
+        });
+
+        return null; // Thành công
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use') {
+          return "Email này đã được sử dụng.";
+        }
+        return _translateAuthError(e.code);
+      } catch (e) {
+        // Rollback nếu lỗi khi lưu Firestore
+        if (userCredential != null) await userCredential.user?.delete();
+        return "Lỗi hệ thống: $e";
+      }
     } catch (e) {
-      debugPrint("❌ Error checking email existence: $e");
-      return "Không thể kiểm tra email. Vui lòng thử lại.";
-    }
-
-    UserCredential? userCredential;
-    try {
-      debugPrint("📝 Starting registration for: $email");
-
-      // B1: Tạo tài khoản Authentication
-      userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      final uid = userCredential.user?.uid;
-      if (uid == null) {
-        throw Exception("Không thể lấy UID người dùng");
-      }
-
-      // B2: Lưu thông tin chi tiết vào Firestore
-      await _firestore.collection('users').doc(uid).set({
-        'uid': uid,
-        'email': email,
-        'nickname': nickname,
-        'birthYear': birthYear,
-        'province': province,
-        'createdAt': DateTime.now().toIso8601String(),
-        'photoUrl': '',
-        'favorites': [],
-      });
-
-      debugPrint("✅ Registration completed successfully!");
-      return null; // Thành công
-    } on FirebaseAuthException catch (e) {
-      debugPrint("❌ Firebase Auth Error: ${e.code} - ${e.message}");
-      if (e.code == 'email-already-in-use') {
-        return "Email này đã được sử dụng.";
-      }
-      return _translateAuthError(e.code);
-    } on FirebaseException catch (e) {
-      debugPrint("❌ Firebase Error: ${e.code} - ${e.message}");
-      // Rollback
-      if (userCredential != null) {
-        try {
-          await userCredential.user?.delete();
-        } catch (_) {}
-      }
-      return "Lỗi lưu dữ liệu: ${e.message}";
-    } catch (e) {
-      debugPrint("❌ Unexpected Error: ${e.runtimeType} - $e");
-      // Rollback
-      if (userCredential != null) {
-        try {
-          await userCredential.user?.delete();
-        } catch (_) {}
-      }
-      return "Lỗi hệ thống: $e";
+      return "Lỗi không xác định: $e";
     }
   }
 
   // Đăng nhập
-  Future<String?> signIn({
-    required String email,
-    required String password,
-  }) async {
+  Future<String?> signIn(
+      {required String email, required String password}) async {
     try {
       await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
-      debugPrint("✅ User signed in: $email");
       return null;
     } on FirebaseAuthException catch (e) {
-      debugPrint("❌ Sign In Error: ${e.code}");
       if (e.code == 'user-not-found') return "Email không tồn tại.";
       if (e.code == 'wrong-password') return "Mật khẩu sai.";
       if (e.code == 'invalid-credential') return "Email hoặc mật khẩu sai.";
       return "Lỗi đăng nhập: ${e.code}";
     } catch (e) {
-      debugPrint("❌ Sign In Error: $e");
       return "Lỗi hệ thống. Vui lòng thử lại.";
     }
   }
@@ -183,37 +186,9 @@ class FirebaseService {
   // Đăng xuất
   Future<void> signOut() async {
     await _auth.signOut();
-    debugPrint("✅ User signed out");
   }
 
-  // Dịch mã lỗi sang tiếng Việt
-  String _translateAuthError(String code) {
-    switch (code) {
-      case 'email-already-in-use':
-        return 'Email này đã được sử dụng.';
-      case 'invalid-email':
-        return 'Địa chỉ email không hợp lệ.';
-      case 'weak-password':
-        return 'Mật khẩu quá yếu (cần > 6 ký tự).';
-      case 'operation-not-allowed':
-        return 'Tính năng này chưa được bật.';
-      default:
-        return 'Lỗi: $code';
-    }
-  }
-
-  // --- 2. LẤY DỮ LIỆU (DATA) ---
-
-  // Lấy thông tin User hiện tại
-  Stream<DocumentSnapshot> getUserStream() {
-    if (_auth.currentUser == null) return const Stream.empty();
-    return _firestore
-        .collection('users')
-        .doc(_auth.currentUser!.uid)
-        .snapshots();
-  }
-
-  // --- 3. UPLOAD AVATAR ---
+  // Upload Avatar lên Storage
   Future<String?> uploadAvatar(File imageFile) async {
     try {
       final user = _auth.currentUser;
@@ -222,20 +197,20 @@ class FirebaseService {
       final ref = _storage.ref().child('user_avatars/${user.uid}.jpg');
       await ref.putFile(imageFile);
       final imageUrl = await ref.getDownloadURL();
-      await user.updatePhotoURL(imageUrl);
 
+      // Update cả Auth Profile và Firestore
+      await user.updatePhotoURL(imageUrl);
       await _firestore.collection('users').doc(user.uid).update({
         'photoUrl': imageUrl,
       });
 
       return null;
     } catch (e) {
-      debugPrint("Lỗi upload ảnh: $e");
       return "Lỗi upload: $e";
     }
   }
 
-  // Cập nhật thông tin User
+  // Cập nhật thông tin profile
   Future<String?> updateUserProfile({
     required String nickname,
     required int birthYear,
@@ -250,17 +225,46 @@ class FirebaseService {
         'birthYear': birthYear,
         'province': province,
       });
-      debugPrint("✅ Profile updated");
       return null;
     } catch (e) {
       return "Lỗi cập nhật: $e";
     }
   }
 
-  // Lấy danh sách Động vật
+  // Dịch mã lỗi Auth
+  String _translateAuthError(String code) {
+    switch (code) {
+      case 'email-already-in-use':
+        return 'Email này đã được sử dụng.';
+      case 'invalid-email':
+        return 'Địa chỉ email không hợp lệ.';
+      case 'weak-password':
+        return 'Mật khẩu quá yếu (cần > 6 ký tự).';
+      default:
+        return 'Lỗi: $code';
+    }
+  }
+
+  // ==========================================
+  // 2. DỮ LIỆU ĐỘNG VẬT & TIN TỨC
+  // ==========================================
+
+  // Stream User hiện tại
+  Stream<DocumentSnapshot> getUserStream() {
+    if (_auth.currentUser == null) return const Stream.empty();
+    return _firestore
+        .collection('users')
+        .doc(_auth.currentUser!.uid)
+        .snapshots();
+  }
+
+  // Lấy danh sách Động vật (Real-time)
   Stream<List<Animal>> getAnimalsStream() {
     return _firestore.collection('animals').snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => Animal.fromMap(doc.data())).toList();
+      return snapshot.docs.map((doc) {
+        // Lưu ý: Đảm bảo class Animal.fromMap xử lý cả ID nếu cần
+        return Animal.fromMap(doc.data());
+      }).toList();
     });
   }
 
@@ -273,14 +277,12 @@ class FirebaseService {
     });
   }
 
-  // --- 4. CÁC HÀM MỚI (FIX LỖI) ---
-
-  // ✅ [MỚI] Hàm lấy thú nổi bật (KHẮC PHỤC LỖI undefined_method)
+  // Lấy thú nổi bật (Top likes)
   Future<List<Map<String, dynamic>>> getFeaturedAnimals() async {
     try {
       final snapshot = await _firestore
           .collection('animals')
-          .orderBy('likes', descending: true)
+          .orderBy('likes', descending: true) // Sắp xếp theo field 'likes'
           .limit(6)
           .get();
 
@@ -299,27 +301,31 @@ class FirebaseService {
     }
   }
 
-  // ✅ [SỬA] Hàm lấy thời tiết theo tọa độ (Đã sửa lỗi cú pháp 'catch (e) {a')
-  Future<Map<String, dynamic>?> fetchWeather(double lat, double lon) async {
-    // ⚠️ Thay API Key của bạn vào đây
-    const apiKey = '73106710a0fed9e9783784aeed44bf93';
+  // ==========================================
+  // 3. TƯƠNG TÁC (YÊU THÍCH / LIKE) - MỚI
+  // ==========================================
 
+  // ✅ Hàm tăng lượt thích (Increment Like)
+  Future<void> loveAnimal(String animalId) async {
     try {
-      final url = Uri.parse(
-          'https://api.openweathermap.org/data/2.5/weather?lat=$lat&lon=$lon&appid=$apiKey&units=metric&lang=vi');
-
-      final response = await http.get(url);
-
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        debugPrint('Lỗi API thời tiết: ${response.statusCode}');
-        return null;
-      }
+      // FieldValue.increment(1) giúp tăng an toàn, tránh race condition
+      await _firestore.collection('animals').doc(animalId).update({
+        'likes': FieldValue.increment(1),
+      });
     } catch (e) {
-      // <-- Đã xóa chữ 'a' thừa ở đây
-      debugPrint('Lỗi gọi API thời tiết: $e');
-      return null;
+      debugPrint("Lỗi khi yêu thích: $e");
+      rethrow;
+    }
+  }
+
+  // ✅ (Tuỳ chọn) Hàm bỏ thích (Decrement Like)
+  Future<void> unLoveAnimal(String animalId) async {
+    try {
+      await _firestore.collection('animals').doc(animalId).update({
+        'likes': FieldValue.increment(-1),
+      });
+    } catch (e) {
+      debugPrint("Lỗi khi bỏ thích: $e");
     }
   }
 }

@@ -13,6 +13,7 @@ class Animal {
   final String imagePath; // Đường dẫn ảnh (local asset)
   final String modelPath; // Đường dẫn 3D (local asset)
   final String soundPath; // Đường dẫn âm thanh (local asset)
+  final int favoriteCount;
 
   Animal({
     required this.id,
@@ -26,6 +27,7 @@ class Animal {
     required this.imagePath,
     required this.modelPath,
     required this.soundPath,
+    this.favoriteCount = 0,
   });
 
   // Chuyển dữ liệu từ Firebase về Object

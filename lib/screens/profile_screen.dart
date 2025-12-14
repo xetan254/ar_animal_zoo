@@ -241,8 +241,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const AiChatScreen()))),
-                  const Divider(height: 30),
+                              builder: (_) => const AIChatScreen()))),
                   _buildMenuItem(
                       context,
                       Icons.person_outline,

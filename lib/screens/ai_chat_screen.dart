@@ -1,152 +1,160 @@
 import 'package:flutter/material.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
-class AiChatScreen extends StatefulWidget {
-  const AiChatScreen({super.key});
+class AIChatScreen extends StatefulWidget {
+  const AIChatScreen({Key? key}) : super(key: key);
 
   @override
-  State<AiChatScreen> createState() => _AiChatScreenState();
+  State<AIChatScreen> createState() => _AIChatScreenState();
 }
 
-class _AiChatScreenState extends State<AiChatScreen> {
-  // ⚠️ QUAN TRỌNG: Thay bằng API Key mới của bạn lấy từ https://aistudio.google.com/
-  final String _apiKey = 'AIzaSyB3KHjG2e_ugiJUySzRcK-Q4fRFRJgDJb0';
+class _AIChatScreenState extends State<AIChatScreen> {
+  // Controller để quản lý text nhập vào
+  final TextEditingController _textController = TextEditingController();
 
-  late final GenerativeModel _model;
-  late final ChatSession _chatSession;
-  final TextEditingController _controller = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
+  // Danh sách tin nhắn
   final List<Map<String, String>> _messages = [];
+
+  // Trạng thái loading
   bool _isLoading = false;
+
+  // Cấu hình Gemini
+  // Lưu ý: Hiện tại model ổn định nhất là 'gemini-1.5-pro' hoặc 'gemini-pro'.
+  // Nếu bạn có quyền truy cập 'gemini-2.5-pro' (future/beta), hãy đổi tên chuỗi bên dưới.
+  late final GenerativeModel _model;
 
   @override
   void initState() {
     super.initState();
-    try {
-      // Sử dụng model gemini-1.5-pro (mạnh hơn, thông minh hơn)
-      _model = GenerativeModel(
-        model: 'gemini-2.5-pro',
-        apiKey: _apiKey,
-        // Tắt bộ lọc an toàn để tránh bị chặn câu trả lời vô lý
-        safetySettings: [
-          SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
-          SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
-          SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
-          SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
-        ],
-      );
-
-      _chatSession = _model.startChat(history: [
-        Content.text(
-            'Bạn là trợ lý ảo về động vật của ứng dụng ARZoo. Hãy trả lời ngắn gọn, thân thiện.'),
-      ]);
-
-      _addMessage('model',
-          'Chào bạn! Mình là Gemini 1.5 Pro. Bạn muốn hỏi về con vật nào?');
-    } catch (e) {
-      _addMessage('model', 'Lỗi khởi tạo: $e');
-    }
+    // KHỞI TẠO GEMINI
+    // Thay thế 'YOUR_API_KEY_HERE' bằng API Key thực tế của bạn
+    const apiKey = 'AIzaSyB3KHjG2e_ugiJUySzRcK-Q4fRFRJgDJb0';
+    _model = GenerativeModel(
+      model: 'gemini-1.5-pro', // Hoặc 'gemini-pro'
+      apiKey: apiKey,
+    );
   }
 
-  void _addMessage(String role, String text) {
-    if (mounted) {
-      setState(() => _messages.add({'role': role, 'text': text}));
-      _scrollToBottom();
-    }
-  }
-
+  // Hàm gửi tin nhắn
   Future<void> _sendMessage() async {
-    final text = _controller.text.trim();
+    final text = _textController.text.trim();
     if (text.isEmpty) return;
 
-    _addMessage('user', text);
-    _controller.clear();
-    setState(() => _isLoading = true);
+    // 1. Thêm tin nhắn của User vào list và cập nhật UI
+    setState(() {
+      _messages.add({"role": "user", "text": text});
+      _isLoading = true;
+    });
+    _textController.clear();
 
     try {
-      final response = await _chatSession.sendMessage(Content.text(text));
+      // 2. Gọi API Gemini
+      final content = [Content.text(text)];
+      final response = await _model.generateContent(content);
 
-      if (response.text != null) {
-        _addMessage('model', response.text!);
-      } else {
-        _addMessage('model', 'AI không phản hồi (Lỗi data null).');
-      }
+      // 3. Nhận phản hồi và cập nhật UI
+      setState(() {
+        _messages.add({
+          "role": "ai",
+          "text": response.text ?? "Xin lỗi, tôi không thể trả lời lúc này."
+        });
+      });
     } catch (e) {
-      _addMessage('model', 'Lỗi kết nối: $e');
+      setState(() {
+        _messages.add({"role": "ai", "text": "Lỗi kết nối: $e"});
+      });
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+      });
     }
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Chat với Gemini 1.5 Pro'),
-          backgroundColor: Colors.blueAccent),
+        title: const Text("Chat với AI Zoo"),
+        backgroundColor: Colors.blueAccent,
+      ),
       body: Column(
         children: [
+          // PHẦN 1: DANH SÁCH TIN NHẮN
+          // Dùng Expanded để chiếm toàn bộ không gian còn lại -> SỬA LỖI OVERFLOW
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final msg = _messages[index];
-                final isUser = msg['role'] == 'user';
-                return Align(
-                  alignment:
-                      isUser ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 5),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isUser ? Colors.blueAccent : Colors.grey[200],
-                      borderRadius: BorderRadius.circular(15),
+            child: _messages.isEmpty
+                ? const Center(
+                    child: Text(
+                      "Hãy hỏi tôi về các loài động vật!",
+                      style: TextStyle(color: Colors.grey),
                     ),
-                    constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width * 0.8),
-                    child: Text(msg['text']!,
-                        style: TextStyle(
-                            color: isUser ? Colors.white : Colors.black87)),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final msg = _messages[index];
+                      final isUser = msg['role'] == 'user';
+                      return Align(
+                        alignment: isUser
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isUser ? Colors.blue : Colors.grey[300],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * 0.75,
+                          ),
+                          child: Text(
+                            msg['text']!,
+                            style: TextStyle(
+                              color: isUser ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
-          if (_isLoading) const LinearProgressIndicator(),
+
+          // Hiển thị loading khi đang chờ AI trả lời
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: LinearProgressIndicator(),
+            ),
+
+          // PHẦN 2: Ô NHẬP LIỆU
           Container(
-            padding: const EdgeInsets.all(10),
-            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black12, blurRadius: 4, offset: Offset(0, -2))
+              ],
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
-                    controller: _controller,
-                    decoration: InputDecoration(
-                      hintText: 'Hỏi Gemini Pro...',
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(25)),
-                      filled: true,
+                    controller: _textController,
+                    decoration: const InputDecoration(
+                      hintText: "Nhập câu hỏi...",
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 16),
                     ),
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
                 IconButton(
-                    icon: const Icon(Icons.send, color: Colors.blueAccent),
-                    onPressed: _isLoading ? null : _sendMessage),
+                  icon: const Icon(Icons.send, color: Colors.blue),
+                  onPressed: _isLoading ? null : _sendMessage,
+                ),
               ],
             ),
           ),
