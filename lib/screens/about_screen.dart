@@ -8,24 +8,24 @@ class AboutScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
           title: const Text("Giới thiệu"), backgroundColor: Colors.purple),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+      body: const SingleChildScrollView(
+        padding: EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Icon(Icons.pets, size: 100, color: Colors.purple),
-            const SizedBox(height: 20),
-            const Text(
+            Icon(Icons.pets, size: 100, color: Colors.purple),
+            SizedBox(height: 20),
+            Text(
               "AR Animal Zoo",
               style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                   color: Colors.purple),
             ),
-            const SizedBox(height: 10),
-            const Text("Phiên bản 1.0.0", style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 30),
-            const Text(
+            SizedBox(height: 10),
+            Text("Phiên bản 1.0.0", style: TextStyle(color: Colors.grey)),
+            SizedBox(height: 30),
+            Text(
               "AR Animal Zoo là ứng dụng giáo dục giúp người dùng khám phá thế giới động vật thông qua công nghệ Thực tế ảo tăng cường (AR). \n\n"
               "Tính năng chính:\n"
               "- Tra cứu thông tin động vật.\n"
@@ -35,8 +35,8 @@ class AboutScreen extends StatelessWidget {
               style: TextStyle(fontSize: 16, height: 1.5),
               textAlign: TextAlign.justify,
             ),
-            const SizedBox(height: 40),
-            const Text("Phát triển bởi xetan254",
+            SizedBox(height: 40),
+            Text("Phát triển bởi Nhóm 11",
                 style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),

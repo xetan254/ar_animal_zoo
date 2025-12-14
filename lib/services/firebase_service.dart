@@ -277,24 +277,26 @@ class FirebaseService {
     });
   }
 
-  // Lấy thú nổi bật (Top likes)
-  Future<List<Map<String, dynamic>>> getFeaturedAnimals() async {
+  // ✅ [QUAN TRỌNG] Lấy thú nổi bật (Sửa lại logic để đảm bảo luôn hiển thị)
+  Future<List<Animal>> getFeaturedAnimals() async {
     try {
-      final snapshot = await _firestore
-          .collection('animals')
-          .orderBy('likes', descending: true) // Sắp xếp theo field 'likes'
-          .limit(6)
-          .get();
+      // 1. Lấy 20 con vật bất kỳ (thay vì sort trên server có thể gây lỗi)
+      final snapshot = await _firestore.collection('animals').limit(20).get();
 
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'id': doc.id,
-          'name': data['name'] ?? 'Không tên',
-          'image': data['imagePath'] ?? '',
-          'likes': data['likes'] ?? 0,
-        };
+      if (snapshot.docs.isEmpty) return [];
+
+      // 2. Chuyển đổi sang List<Animal>
+      List<Animal> animals = snapshot.docs.map((doc) {
+        // Đảm bảo map data và xử lý null
+        return Animal.fromMap(doc.data());
       }).toList();
+
+      // 3. Sắp xếp Client-side (Giảm dần theo favoriteCount)
+      // Nếu favoriteCount bằng nhau, giữ nguyên thứ tự
+      animals.sort((a, b) => b.favoriteCount.compareTo(a.favoriteCount));
+
+      // 4. Lấy 6 con đầu tiên
+      return animals.take(6).toList();
     } catch (e) {
       debugPrint("Lỗi lấy thú nổi bật: $e");
       return [];
@@ -302,27 +304,27 @@ class FirebaseService {
   }
 
   // ==========================================
-  // 3. TƯƠNG TÁC (YÊU THÍCH / LIKE) - MỚI
+  // 3. TƯƠNG TÁC (YÊU THÍCH / LIKE)
   // ==========================================
 
-  // ✅ Hàm tăng lượt thích (Increment Like)
+  // ✅ Hàm tăng lượt thích (Dùng favoriteCount)
   Future<void> loveAnimal(String animalId) async {
     try {
-      // FieldValue.increment(1) giúp tăng an toàn, tránh race condition
+      // Dùng FieldValue.increment(1) giúp tăng an toàn
       await _firestore.collection('animals').doc(animalId).update({
-        'likes': FieldValue.increment(1),
+        'favoriteCount': FieldValue.increment(1),
       });
     } catch (e) {
       debugPrint("Lỗi khi yêu thích: $e");
-      rethrow;
+      // Không rethrow để tránh crash UI nếu lỗi mạng
     }
   }
 
-  // ✅ (Tuỳ chọn) Hàm bỏ thích (Decrement Like)
+  // ✅ Hàm bỏ thích (Dùng favoriteCount)
   Future<void> unLoveAnimal(String animalId) async {
     try {
       await _firestore.collection('animals').doc(animalId).update({
-        'likes': FieldValue.increment(-1),
+        'favoriteCount': FieldValue.increment(-1),
       });
     } catch (e) {
       debugPrint("Lỗi khi bỏ thích: $e");

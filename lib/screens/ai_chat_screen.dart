@@ -30,7 +30,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
     // Thay thế 'YOUR_API_KEY_HERE' bằng API Key thực tế của bạn
     const apiKey = 'AIzaSyB3KHjG2e_ugiJUySzRcK-Q4fRFRJgDJb0';
     _model = GenerativeModel(
-      model: 'gemini-1.5-pro', // Hoặc 'gemini-pro'
+      model: 'gemini-3-pro', // Hoặc 'gemini-pro'
       apiKey: apiKey,
     );
   }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ar_animal_zoo/data/zoo_data.dart';
+import '../data/zoo_data.dart';
+import '../services/firebase_service.dart'; // Import service để dùng hàm loveAnimal
+// import 'ar_screen.dart'; // Bỏ comment nếu bạn đã có file màn hình AR
 
 class AnimalDetailScreen extends StatefulWidget {
   final Animal animal;
@@ -14,7 +16,9 @@ class AnimalDetailScreen extends StatefulWidget {
 
 class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
   bool isFavorite = false;
-  bool isLoading = true; // Biến để chờ load trạng thái ban đầu
+  bool isLoading = true; // Trạng thái tải ban đầu
+  final FirebaseService _firebaseService =
+      FirebaseService(); // Khởi tạo Service
 
   @override
   void initState() {
@@ -22,7 +26,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
     _checkFavoriteStatus();
   }
 
-  // Kiểm tra xem con vật này đã được like chưa
+  // 1. Kiểm tra trạng thái yêu thích ban đầu của User
   Future<void> _checkFavoriteStatus() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -33,7 +37,9 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
             .get();
 
         if (doc.exists) {
+          // Lấy mảng favorites từ Firestore
           List<dynamic> favorites = doc.data()?['favorites'] ?? [];
+          // Kiểm tra xem ID con vật có trong mảng không
           if (favorites.contains(widget.animal.id)) {
             if (mounted) setState(() => isFavorite = true);
           }
@@ -45,9 +51,11 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
     if (mounted) setState(() => isLoading = false);
   }
 
-  // Hàm xử lý khi bấm nút tim
+  // 2. Xử lý khi bấm nút Tim
   Future<void> toggleFavorite() async {
     final user = FirebaseAuth.instance.currentUser;
+
+    // Yêu cầu đăng nhập
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Bạn cần đăng nhập để lưu yêu thích!')),
@@ -55,7 +63,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
       return;
     }
 
-    // Đổi trạng thái UI ngay lập tức cho mượt (Optimistic UI update)
+    // Đảo ngược trạng thái UI ngay lập tức (Optimistic UI)
     setState(() {
       isFavorite = !isFavorite;
     });
@@ -65,22 +73,36 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
 
     try {
       if (isFavorite) {
-        // Thêm vào mảng favorites
+        // --- TRƯỜNG HỢP: THÍCH (LIKE) ---
+
+        // A. Thêm vào danh sách cá nhân của User
         await userRef.update({
           'favorites': FieldValue.arrayUnion([widget.animal.id])
         });
+
+        // B. Tăng số lượng like toàn cục (Service)
+        // Lưu ý: Đảm bảo 'id' của Animal trùng với Document ID trên Firebase
+        await _firebaseService.loveAnimal(widget.animal.id);
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('Đã thêm ${widget.animal.name} vào yêu thích ❤️'),
+                content:
+                    Text('Đã thích ${widget.animal.name} ❤️ (+1 lượt thích)'),
                 duration: const Duration(seconds: 1)),
           );
         }
       } else {
-        // Xóa khỏi mảng favorites
+        // --- TRƯỜNG HỢP: BỎ THÍCH (UNLIKE) ---
+
+        // A. Xóa khỏi danh sách cá nhân
         await userRef.update({
           'favorites': FieldValue.arrayRemove([widget.animal.id])
         });
+
+        // B. Giảm số lượng like toàn cục (Service)
+        await _firebaseService.unLoveAnimal(widget.animal.id);
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -90,13 +112,13 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
         }
       }
     } catch (e) {
-      // Nếu lỗi thì hoàn tác lại UI
+      // Nếu lỗi, quay ngược lại trạng thái UI cũ
       setState(() {
         isFavorite = !isFavorite;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e')),
+          SnackBar(content: Text('Lỗi kết nối: $e')),
         );
       }
     }
@@ -104,6 +126,11 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Xử lý hiển thị ảnh (Asset hoặc Network)
+    final imageProvider = (widget.animal.imagePath.startsWith('http'))
+        ? NetworkImage(widget.animal.imagePath)
+        : AssetImage(widget.animal.imagePath) as ImageProvider;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.animal.name),
@@ -130,12 +157,17 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
         child: Column(
           children: [
             // Ảnh bìa
-            Image.asset(
-              widget.animal.imagePath,
+            Image(
+              image: imageProvider,
               width: double.infinity,
               height: 300,
               fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox(
+                height: 300,
+                child: Center(child: Icon(Icons.broken_image, size: 50)),
+              ),
             ),
+
             // Nội dung chi tiết
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -159,6 +191,8 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
+
+                  // Các thông tin chi tiết
                   _buildInfoRow(
                       Icons.place, "Môi trường sống", widget.animal.habitat),
                   _buildInfoRow(
@@ -169,6 +203,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
                       widget.animal.conservationStatus),
 
                   const Divider(height: 30),
+
                   const Text(
                     "Mô tả",
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -184,10 +219,19 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
                     textAlign: TextAlign.justify,
                   ),
                   const SizedBox(height: 30),
+
                   // Nút xem AR
                   ElevatedButton.icon(
                     onPressed: () {
-                      // Logic điều hướng sang màn hình AR
+                      // Nếu bạn có màn hình AR, hãy dùng lệnh này:
+                      /*
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ARScreen(animal: widget.animal),
+                        ),
+                      );
+                      */
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                             content: Text("Tính năng AR đang tải...")),

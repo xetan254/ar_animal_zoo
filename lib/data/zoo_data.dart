@@ -44,6 +44,7 @@ class Animal {
       imagePath: data['imagePath'] ?? '',
       modelPath: data['modelPath'] ?? '',
       soundPath: data['soundPath'] ?? '',
+      favoriteCount: data['favoriteCount'] ?? 0,
     );
   }
 

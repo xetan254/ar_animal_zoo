@@ -14,14 +14,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late Future<List<Map<String, dynamic>>> _featuredAnimalsFuture;
+  // ✅ SỬA 1: Đổi kiểu dữ liệu từ List<Map> sang List<Animal>
+  late Future<List<Animal>> _featuredAnimalsFuture;
   late Future<Map<String, dynamic>?> _weatherFuture;
 
   @override
   void initState() {
     super.initState();
+    // Bây giờ kiểu dữ liệu đã khớp với hàm trong Service
     _featuredAnimalsFuture = FirebaseService().getFeaturedAnimals();
-    // Khởi tạo weather future ban đầu (chưa có data)
     _weatherFuture = _determinePositionAndFetchWeather();
   }
 
@@ -30,32 +31,24 @@ class _HomeScreenState extends State<HomeScreen> {
     bool serviceEnabled;
     LocationPermission permission;
 
-    // 1. Kiểm tra GPS có bật không
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      // GPS tắt -> Gọi API mặc định
       return FirebaseService().fetchWeather(21.0285, 105.8542);
     }
 
-    // 2. Kiểm tra quyền
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        // Từ chối quyền -> Mặc định Hà Nội
         return FirebaseService().fetchWeather(21.0285, 105.8542);
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      // Từ chối vĩnh viễn -> Mặc định Hà Nội
       return FirebaseService().fetchWeather(21.0285, 105.8542);
     }
 
-    // 3. Lấy vị trí hiện tại
     Position position = await Geolocator.getCurrentPosition();
-
-    // 4. Gọi API thời tiết với tọa độ thật
     return FirebaseService()
         .fetchWeather(position.latitude, position.longitude);
   }
@@ -214,7 +207,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildFeaturedAnimals() {
     return SizedBox(
       height: 220,
-      child: FutureBuilder<List<Map<String, dynamic>>>(
+      // ✅ SỬA 2: Sử dụng FutureBuilder<List<Animal>>
+      child: FutureBuilder<List<Animal>>(
         future: _featuredAnimalsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -229,6 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.only(left: 20),
             itemCount: animals.length,
+            // Truyền đối tượng Animal trực tiếp vào hàm build card
             itemBuilder: (context, index) => _buildAnimalCard(animals[index]),
           );
         },
@@ -236,20 +231,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildAnimalCard(Map<String, dynamic> animalData) {
+  // ✅ SỬA 3: Tham số nhận vào là Animal, không phải Map
+  Widget _buildAnimalCard(Animal animal) {
     return GestureDetector(
       onTap: () {
-        try {
-          final localAnimal =
-              zooAnimals.firstWhere((a) => a.id == animalData['id']);
-          Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => AnimalDetailScreen(animal: localAnimal)));
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Chưa có thông tin chi tiết")));
-        }
+        // ✅ SỬA 4: Chuyển trang trực tiếp bằng object animal
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => AnimalDetailScreen(animal: animal)));
       },
       child: Container(
         width: 160,
@@ -270,19 +260,28 @@ class _HomeScreenState extends State<HomeScreen> {
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(15)),
-              child: Image.network(animalData['image'],
-                  height: 120,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      Container(height: 120, color: Colors.grey[200])),
+              // ✅ SỬA 5: Kiểm tra ảnh online hay offline để hiển thị đúng Widget
+              child: (animal.imagePath.startsWith('http'))
+                  ? Image.network(animal.imagePath,
+                      height: 120,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          Container(height: 120, color: Colors.grey[200]))
+                  : Image.asset(animal.imagePath,
+                      height: 120,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          Container(height: 120, color: Colors.grey[200])),
             ),
             Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(animalData['name'],
+                  // ✅ SỬA 6: Dùng thuộc tính của class Animal
+                  Text(animal.name,
                       style: const TextStyle(
                           fontWeight: FontWeight.bold, fontSize: 14),
                       maxLines: 1,
@@ -292,7 +291,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Icon(Icons.favorite,
                         color: Colors.redAccent, size: 14),
                     const SizedBox(width: 4),
-                    Text('${animalData['likes']}',
+                    Text('${animal.favoriteCount}',
                         style: TextStyle(color: Colors.grey[600], fontSize: 12))
                   ]),
                 ],
