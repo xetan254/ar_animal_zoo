@@ -9,38 +9,35 @@ class AIChatScreen extends StatefulWidget {
 }
 
 class _AIChatScreenState extends State<AIChatScreen> {
-  // Controller để quản lý text nhập vào
   final TextEditingController _textController = TextEditingController();
-
-  // Danh sách tin nhắn
   final List<Map<String, String>> _messages = [];
-
-  // Trạng thái loading
   bool _isLoading = false;
-
-  // Cấu hình Gemini
-  // Lưu ý: Hiện tại model ổn định nhất là 'gemini-1.5-pro' hoặc 'gemini-pro'.
-  // Nếu bạn có quyền truy cập 'gemini-2.5-pro' (future/beta), hãy đổi tên chuỗi bên dưới.
   late final GenerativeModel _model;
 
   @override
   void initState() {
     super.initState();
-    // KHỞI TẠO GEMINI
-    // Thay thế 'YOUR_API_KEY_HERE' bằng API Key thực tế của bạn
+    // API KEY của bạn
     const apiKey = 'AIzaSyB3KHjG2e_ugiJUySzRcK-Q4fRFRJgDJb0';
+
     _model = GenerativeModel(
-      model: 'gemini-3-pro', // Hoặc 'gemini-pro'
+      // ✅ SỬA LẠI: Dùng 'gemini-1.5-flash' (Nhanh, nhẹ, ít lỗi Not Found hơn)
+      // Nếu vẫn lỗi, hãy thử quay về 'gemini-pro' (bản 1.0 ổn định)
+      model: 'gemini-2.5-flash',
       apiKey: apiKey,
+      safetySettings: [
+        SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
+      ],
     );
   }
 
-  // Hàm gửi tin nhắn
   Future<void> _sendMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
-    // 1. Thêm tin nhắn của User vào list và cập nhật UI
     setState(() {
       _messages.add({"role": "user", "text": text});
       _isLoading = true;
@@ -48,20 +45,29 @@ class _AIChatScreenState extends State<AIChatScreen> {
     _textController.clear();
 
     try {
-      // 2. Gọi API Gemini
       final content = [Content.text(text)];
       final response = await _model.generateContent(content);
 
-      // 3. Nhận phản hồi và cập nhật UI
       setState(() {
         _messages.add({
           "role": "ai",
-          "text": response.text ?? "Xin lỗi, tôi không thể trả lời lúc này."
+          "text": response.text ?? "AI không trả lời được câu hỏi này."
         });
       });
     } catch (e) {
+      // Bắt lỗi cụ thể để dễ sửa
+      String errorMessage = "Đã xảy ra lỗi.";
+      if (e.toString().contains("not found")) {
+        errorMessage = "Model không tìm thấy. Hãy thử đổi sang 'gemini-pro'.";
+      } else if (e.toString().contains("User location is not supported")) {
+        errorMessage =
+            "Vị trí của bạn chưa hỗ trợ AI này (Cần Fake IP hoặc đổi Region).";
+      } else {
+        errorMessage = "Lỗi: ${e.toString()}";
+      }
+
       setState(() {
-        _messages.add({"role": "ai", "text": "Lỗi kết nối: $e"});
+        _messages.add({"role": "ai", "text": errorMessage});
       });
     } finally {
       setState(() {
@@ -79,14 +85,16 @@ class _AIChatScreenState extends State<AIChatScreen> {
       ),
       body: Column(
         children: [
-          // PHẦN 1: DANH SÁCH TIN NHẮN
-          // Dùng Expanded để chiếm toàn bộ không gian còn lại -> SỬA LỖI OVERFLOW
           Expanded(
             child: _messages.isEmpty
                 ? const Center(
-                    child: Text(
-                      "Hãy hỏi tôi về các loài động vật!",
-                      style: TextStyle(color: Colors.grey),
+                    child: Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Text(
+                        "Chào bạn! Tôi là AI hướng dẫn viên.\nHãy hỏi tôi về các loài động vật nhé! 🦁",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey, fontSize: 16),
+                      ),
                     ),
                   )
                 : ListView.builder(
@@ -120,15 +128,11 @@ class _AIChatScreenState extends State<AIChatScreen> {
                     },
                   ),
           ),
-
-          // Hiển thị loading khi đang chờ AI trả lời
           if (_isLoading)
             const Padding(
               padding: EdgeInsets.all(8.0),
               child: LinearProgressIndicator(),
             ),
-
-          // PHẦN 2: Ô NHẬP LIỆU
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             decoration: const BoxDecoration(
