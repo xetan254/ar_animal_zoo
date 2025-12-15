@@ -26,12 +26,12 @@ class AboutScreen extends StatelessWidget {
             Text("Phiên bản 1.0.0", style: TextStyle(color: Colors.grey)),
             SizedBox(height: 30),
             Text(
-              "AR Animal Zoo là ứng dụng giáo dục giúp người dùng khám phá thế giới động vật thông qua công nghệ Thực tế ảo tăng cường (AR). \n\n"
-              "Tính năng chính:\n"
-              "- Tra cứu thông tin động vật.\n"
-              "- Xem mô hình 3D trong không gian thật.\n"
-              "- Nhận diện động vật bằng AI (Camera).\n"
-              "- Hỏi đáp với trợ lý ảo thông minh.",
+              "Biến chuyến đi sở thú thành cuộc phiêu lưu kỳ thú cùng AR Animal Zoo! Ứng dụng giúp bạn khám phá thế giới hoang dã theo cách chưa từng có.\n\n"
+              "Bạn có thể làm gì?\n"
+              "- 🔍 Nhận diện nhanh: Gặp con vật lạ? Hãy để AI giúp bạn gọi tên.\n"
+              "- ✨ Phép thuật AR: Xem động vật 3D chuyển động ngay trên tay bạn.\n"
+              "- 🧠 Hỏi đáp thông minh: Trò chuyện cùng trợ lý ảo để hiểu thêm những điều thú vị.\n"
+              "- 📚 Kiến thức bổ ích: Kho dữ liệu phong phú về các loài động vật tại sở thú.",
               style: TextStyle(fontSize: 16, height: 1.5),
               textAlign: TextAlign.justify,
             ),
