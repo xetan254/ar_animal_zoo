@@ -1,10 +1,11 @@
 import 'dart:io';
-// import 'package:flutter/foundation.dart';
+import 'dart:ui'; // Quan trọng cho hiệu ứng mờ (Glassmorphism)
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:vector_math/vector_math_64.dart' as vector;
+import 'package:permission_handler/permission_handler.dart';
 
 // --- IMPORT AR FLUTTER PLUGIN ---
 import 'package:ar_flutter_plugin/ar_flutter_plugin.dart';
@@ -30,7 +31,7 @@ class ARScreen extends StatefulWidget {
   State<ARScreen> createState() => _ARScreenState();
 }
 
-class _ARScreenState extends State<ARScreen> {
+class _ARScreenState extends State<ARScreen> with WidgetsBindingObserver {
   ARSessionManager? arSessionManager;
   ARObjectManager? arObjectManager;
   ARAnchorManager? arAnchorManager;
@@ -38,127 +39,215 @@ class _ARScreenState extends State<ARScreen> {
   ARNode? currentNode;
   ARPlaneAnchor? currentAnchor;
 
-  // Biến lưu tên file cache để tránh copy nhiều lần
   String? _cachedFileName;
-
   final player = AudioPlayer();
   bool isLoading = false;
 
-  // --- BIẾN ĐIỀU KHIỂN ---
+  // Mặc định scale 0.2, dùng cho Slider
   double currentScale = 0.2;
+
+  bool _isPermissionGranted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkPermission();
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     arSessionManager?.dispose();
     player.dispose();
     super.dispose();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_isPermissionGranted) {
+      _checkPermission();
+    }
+  }
+
+  Future<void> _checkPermission() async {
+    var status = await Permission.camera.status;
+    if (status.isDenied) {
+      status = await Permission.camera.request();
+    }
+
+    if (mounted) {
+      setState(() {
+        _isPermissionGranted = status.isGranted;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (!_isPermissionGranted) {
+      return _buildPermissionRequestUI();
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.animal.name),
-        backgroundColor: Colors.green,
-      ),
+      extendBodyBehindAppBar: true, // Cho phép nội dung tràn lên status bar
+      appBar: null, // Tắt AppBar mặc định để tự custom
       body: Stack(
         children: [
-          // 1. Màn hình Camera AR
+          // 1. AR View (Nền)
           ARView(
             onARViewCreated: onARViewCreated,
             planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
           ),
 
-          // 2. Loading Indicator
-          if (isLoading)
-            const Center(
-              child: Card(
-                color: Colors.black54,
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(color: Colors.white),
-                      SizedBox(height: 10),
-                      Text("Đang xử lý...",
-                          style: TextStyle(color: Colors.white)),
+          // 2. Custom Header (Back button + Title)
+          Positioned(
+            top: 50, // Tránh tai thỏ
+            left: 20,
+            right: 20,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Nút Back tròn
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white30),
+                    ),
+                    child: const Icon(Icons.arrow_back_ios_new,
+                        color: Colors.white, size: 20),
+                  ),
+                ),
+
+                // Tên con vật (Có đổ bóng)
+                Text(
+                  widget.animal.name.toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    shadows: [
+                      Shadow(
+                          color: Colors.black.withValues(alpha: 0.8),
+                          blurRadius: 10)
                     ],
+                  ),
+                ),
+
+                // Placeholder để cân đối layout (hoặc nút reset AR)
+                const SizedBox(width: 40),
+              ],
+            ),
+          ),
+
+          // 3. Loading Indicator (Giữa màn hình)
+          if (isLoading)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
+
+          // 4. Hướng dẫn (Nằm dưới header)
+          if (currentNode == null && !isLoading)
+            Positioned(
+              top: 100,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black38,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    "Chạm vào mặt phẳng (có chấm trắng) để đặt con vật",
+                    style: TextStyle(color: Colors.white70),
                   ),
                 ),
               ),
             ),
 
-          // 3. Hướng dẫn sử dụng
-          Align(
-            alignment: Alignment.topCenter,
-            child: Container(
-              margin: const EdgeInsets.only(top: 20),
-              padding: const EdgeInsets.all(8),
-              color: Colors.black54,
-              child: const Text(
-                "Chạm màn hình để đặt con vật.\nSử dụng nút bên dưới để đổi kích thước.",
-                style: TextStyle(color: Colors.white),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-
-          // 4. Control Panel - Điều khiển kích cỡ
+          // 5. Control Panel (Glassmorphism + Slider)
           Positioned(
-            bottom: 20,
+            bottom: 30,
             left: 20,
             right: 20,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Hiển thị giá trị kích cỡ
-                  Text(
-                    'Kích cỡ: ${(currentScale * 10).toStringAsFixed(1)}x',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(25),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), // Làm mờ
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  decoration: BoxDecoration(
+                    color:
+                        Colors.white.withValues(alpha: 0.15), // Nền trong suốt
+                    borderRadius: BorderRadius.circular(25),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.2)),
                   ),
-                  const SizedBox(height: 10),
-
-                  // Nút +/-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      ElevatedButton(
-                        onPressed: _decrementScale,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          minimumSize: const Size(60, 40),
-                        ),
-                        child: const Icon(Icons.remove,
-                            color: Colors.white, size: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            "Kích thước",
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            "${(currentScale * 10).toStringAsFixed(1)}x",
+                            style: const TextStyle(
+                                color: Colors.greenAccent,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: _incrementScale,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          minimumSize: const Size(60, 40),
+                      const SizedBox(height: 5),
+                      // Slider điều chỉnh kích thước
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          activeTrackColor: Colors.greenAccent,
+                          inactiveTrackColor: Colors.white24,
+                          thumbColor: Colors.white,
+                          overlayColor:
+                              Colors.greenAccent.withValues(alpha: 0.2),
+                          trackHeight: 4.0,
                         ),
-                        child: const Icon(Icons.add,
-                            color: Colors.white, size: 20),
+                        child: Slider(
+                          value: currentScale,
+                          min: 0.05,
+                          max: 1.0,
+                          onChanged: (value) {
+                            setState(() {
+                              currentScale = value;
+                            });
+                          },
+                          // Chỉ refresh model khi thả tay ra (để đỡ giật)
+                          onChangeEnd: (value) {
+                            _refreshNodeWithNewScale();
+                          },
+                        ),
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -167,7 +256,41 @@ class _ARScreenState extends State<ARScreen> {
     );
   }
 
-  // --- KHỞI TẠO AR ---
+  Widget _buildPermissionRequestUI() {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+          title: Text(widget.animal.name), backgroundColor: Colors.transparent),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.videocam_off, size: 80, color: Colors.grey),
+            const SizedBox(height: 20),
+            const Text("Cần quyền Camera để hiển thị AR",
+                style: TextStyle(color: Colors.white)),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style:
+                  ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent),
+              onPressed: () async {
+                if (await Permission.camera.isPermanentlyDenied) {
+                  openAppSettings();
+                } else {
+                  _checkPermission();
+                }
+              },
+              child: const Text("Cấp quyền ngay",
+                  style: TextStyle(color: Colors.black)),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- AR LOGIC (Giữ nguyên logic cốt lõi) ---
+
   void onARViewCreated(
       ARSessionManager sessionManager,
       ARObjectManager objectManager,
@@ -183,17 +306,14 @@ class _ARScreenState extends State<ARScreen> {
       customPlaneTexturePath: "Images/triangle.png",
       showWorldOrigin: false,
       handleTaps: true,
-      handlePans: true, // Cho phép di chuyển
-      handleRotation: true, // Cho phép xoay
+      handlePans: true,
+      handleRotation: true,
     );
 
     arObjectManager!.onInitialize();
-
-    // Lắng nghe sự kiện chạm để đặt vật thể
     arSessionManager!.onPlaneOrPointTap = onPlaneOrPointTap;
   }
 
-  // --- XỬ LÝ FILE (Copy 1 lần duy nhất) ---
   Future<String> _getOrPrepareModelFile() async {
     if (_cachedFileName != null) return _cachedFileName!;
 
@@ -203,7 +323,6 @@ class _ARScreenState extends State<ARScreen> {
     final localPath = '${directory.path}/$filename';
     final file = File(localPath);
 
-    // Kiểm tra xem file đã tồn tại chưa, nếu chưa thì mới copy
     if (!await file.exists()) {
       final data = await rootBundle.load(assetPath);
       final bytes = data.buffer.asUint8List();
@@ -214,7 +333,6 @@ class _ARScreenState extends State<ARScreen> {
     return filename;
   }
 
-  // --- XỬ LÝ CHẠM MÀN HÌNH ---
   Future<void> onPlaneOrPointTap(List<ARHitTestResult> hitTestResults) async {
     if (hitTestResults.isEmpty || isLoading) return;
 
@@ -222,14 +340,12 @@ class _ARScreenState extends State<ARScreen> {
         (hitTestResult) => hitTestResult.type == ARHitTestResultType.plane,
         orElse: () => hitTestResults.first);
 
-    // Xóa anchor cũ (nếu có) để đặt vị trí mới
     if (currentAnchor != null) {
       arAnchorManager!.removeAnchor(currentAnchor!);
       currentAnchor = null;
       currentNode = null;
     }
 
-    // Tạo Anchor mới
     var newAnchor =
         ARPlaneAnchor(transformation: singleHitTestResult.worldTransform);
     bool? didAddAnchor = await arAnchorManager!.addAnchor(newAnchor);
@@ -240,7 +356,6 @@ class _ARScreenState extends State<ARScreen> {
     }
   }
 
-  // --- HÀM THÊM NODE VÀO ANCHOR ---
   Future<void> _addNodeToAnchor(ARPlaneAnchor anchor,
       {bool playSound = false}) async {
     setState(() {
@@ -255,7 +370,7 @@ class _ARScreenState extends State<ARScreen> {
         uri: fileName,
         scale: vector.Vector3(currentScale, currentScale, currentScale),
         position: vector.Vector3(0.0, 0.0, 0.0),
-        rotation: vector.Vector4(0.7071, 0.7071, 0, 0), // Góc mặc định
+        rotation: vector.Vector4(0.7071, 0.7071, 0, 0),
       );
 
       bool? didAddNodeToAnchor =
@@ -281,49 +396,19 @@ class _ARScreenState extends State<ARScreen> {
     }
   }
 
-  // --- HÀM ĐIỀU KHIỂN SCALE ---
-  void _incrementScale() {
-    if (currentScale < 1.0) {
-      setState(() {
-        currentScale += 0.1;
-        if (currentScale > 1.0) currentScale = 1.0;
-      });
-      _refreshNodeWithNewScale();
-    }
-  }
-
-  void _decrementScale() {
-    if (currentScale > 0.05) {
-      setState(() {
-        currentScale -= 0.1;
-        if (currentScale < 0.05) currentScale = 0.05;
-      });
-      _refreshNodeWithNewScale();
-    }
-  }
-
-  // --- LOGIC LÀM MỚI NODE (GIỮ VỊ TRÍ) ---
   Future<void> _refreshNodeWithNewScale() async {
-    // Chỉ làm mới nếu con vật đang hiển thị
     if (currentAnchor != null && !isLoading) {
       try {
-        // 1. Lưu lại vị trí (transformation) của anchor hiện tại
         var savedTransform = currentAnchor!.transformation;
-
-        // 2. XÓA HOÀN TOÀN ANCHOR CŨ
-        // Việc này đảm bảo node cũ biến mất 100%, không bị chồng hình
         await arAnchorManager!.removeAnchor(currentAnchor!);
         currentAnchor = null;
         currentNode = null;
 
-        // 3. Tạo ngay một Anchor mới tại ĐÚNG VỊ TRÍ CŨ
         var newAnchor = ARPlaneAnchor(transformation: savedTransform);
         bool? didAdd = await arAnchorManager!.addAnchor(newAnchor);
 
         if (didAdd == true) {
           currentAnchor = newAnchor;
-          // 4. Thêm lại model vào anchor mới với kích thước mới
-          // Model sẽ reset về góc xoay mặc định do plugin không hỗ trợ lấy góc xoay cũ
           await _addNodeToAnchor(newAnchor, playSound: false);
         }
       } catch (e) {

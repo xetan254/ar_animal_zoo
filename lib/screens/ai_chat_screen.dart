@@ -18,13 +18,17 @@ class _AIChatScreenState extends State<AIChatScreen> {
   void initState() {
     super.initState();
     // API KEY của bạn
-    const apiKey = 'AIzaSyB3KHjG2e_ugiJUySzRcK-Q4fRFRJgDJb0';
+    const apiKey = '';
 
     _model = GenerativeModel(
-      // ✅ SỬA LẠI: Dùng 'gemini-1.5-flash' (Nhanh, nhẹ, ít lỗi Not Found hơn)
-      // Nếu vẫn lỗi, hãy thử quay về 'gemini-pro' (bản 1.0 ổn định)
       model: 'gemini-2.5-flash',
       apiKey: apiKey,
+      systemInstruction: Content.system(
+          "Bạn là hướng dẫn viên sở thú thân thiện. Hãy trả lời câu hỏi về động vật một cách ngắn gọn, súc tích (khoảng 2-3 câu). Không trả lời dài dòng."),
+      generationConfig: GenerationConfig(
+        maxOutputTokens: 150,
+        temperature: 0.7,
+      ),
       safetySettings: [
         SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
         SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),

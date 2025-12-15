@@ -12,11 +12,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(); // Khởi tạo Firebase
 
-  // --- DÒNG LỆNH QUAN TRỌNG ---
-  // Chạy dòng này 1 lần để đẩy danh sách con vật lên Cloud, sau đó có thể comment lại
-  // await FirebaseService().seedData();
-  // -----------------------------
-
   runApp(const MyApp());
 }
 

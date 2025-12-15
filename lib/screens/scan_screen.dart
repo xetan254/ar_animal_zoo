@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:flutter_vision/flutter_vision.dart'; // Thư viện AI YOLO
-import '../data/zoo_data.dart'; // Nơi chứa dữ liệu Animal và danh sách zooAnimals
-import 'animal_detail_screen.dart'; // Trang chi tiết
+import 'package:flutter_vision/flutter_vision.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../data/zoo_data.dart';
+import 'animal_detail_screen.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -12,71 +13,117 @@ class ScanScreen extends StatefulWidget {
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
+class _ScanScreenState extends State<ScanScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late CameraController controller;
   late FlutterVision vision;
   late List<Map<String, dynamic>> yoloResults;
   CameraImage? cameraImage;
+
+  // Biến trạng thái
+  bool _isPermissionGranted = false;
   bool isLoaded = false;
   bool isDetecting = false;
   bool isCameraInitialized = false;
 
+  // Controller cho hiệu ứng quét (Scanning Animation)
+  late AnimationController _scanAnimationController;
+
   @override
   void initState() {
     super.initState();
-    init();
-  }
+    WidgetsBinding.instance.addObserver(this);
 
-  // Khởi tạo Camera và Model AI
-  init() async {
-    // 1. Khởi tạo Camera
-    final cameras = await availableCameras();
-    vision = FlutterVision();
+    // Khởi tạo animation quét lên xuống
+    _scanAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat(reverse: true); // Chạy đi chạy lại
 
-    // Chọn camera sau (index 0), độ phân giải cao
-    controller = CameraController(cameras[0], ResolutionPreset.high);
-    await controller.initialize();
-
-    // 2. Load Model YOLO
-    await loadYoloModel();
-
-    // 3. Cập nhật trạng thái UI
-    if (mounted) {
-      setState(() {
-        isLoaded = true;
-        isCameraInitialized = true;
-        yoloResults = [];
-      });
-
-      // Tự động bắt đầu detect ngay khi vào màn hình
-      startDetection();
-    }
+    // Kiểm tra quyền ngay khi vào
+    _checkPermission();
   }
 
   @override
   void dispose() {
-    // Giải phóng tài nguyên khi thoát màn hình
-    controller.dispose();
-    vision.closeYoloModel();
+    WidgetsBinding.instance.removeObserver(this);
+    _scanAnimationController.dispose();
+    if (isCameraInitialized) {
+      controller.dispose();
+    }
+    if (isLoaded) {
+      vision.closeYoloModel();
+    }
     super.dispose();
   }
 
-  // Load file model TFLite và Labels
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (!_isPermissionGranted) {
+        _checkPermission();
+      }
+    }
+  }
+
+  Future<void> _checkPermission() async {
+    var status = await Permission.camera.status;
+    if (status.isDenied) {
+      status = await Permission.camera.request();
+    }
+
+    if (status.isGranted) {
+      setState(() {
+        _isPermissionGranted = true;
+      });
+      if (!isCameraInitialized) {
+        init();
+      }
+    } else {
+      setState(() {
+        _isPermissionGranted = false;
+      });
+    }
+  }
+
+  init() async {
+    try {
+      final cameras = await availableCameras();
+      vision = FlutterVision();
+      controller = CameraController(cameras[0], ResolutionPreset.high);
+      await controller.initialize();
+      await loadYoloModel();
+
+      if (mounted) {
+        setState(() {
+          isLoaded = true;
+          isCameraInitialized = true;
+          yoloResults = [];
+        });
+        startDetection();
+      }
+    } catch (e) {
+      debugPrint("Error initializing: $e");
+    }
+  }
+
   Future<void> loadYoloModel() async {
     await vision.loadYoloModel(
       labels: 'assets/tflite/labels.txt',
-      modelPath:
-          'assets/tflite/yolov8n.tflite', // Đảm bảo file này có trong assets
+      modelPath: 'assets/tflite/yolov8n.tflite',
       modelVersion: "yolov8",
       quantization: false,
       numThreads: 2,
-      useGpu: true, // Bật GPU để mượt hơn
+      useGpu: true,
     );
   }
 
-  // Bắt đầu luồng nhận diện
   Future<void> startDetection() async {
-    if (!mounted || controller.value.isStreamingImages) return;
+    if (!mounted ||
+        !controller.value.isInitialized ||
+        controller.value.isStreamingImages) {
+      return;
+    }
 
     setState(() {
       isDetecting = true;
@@ -90,21 +137,10 @@ class _ScanScreenState extends State<ScanScreen> {
         }
       });
     } catch (e) {
-      debugPrint("Error starting stream: $e");
+      debugPrint("Error stream: $e");
     }
   }
 
-  // Dừng luồng nhận diện (khi chuyển trang)
-  Future<void> stopDetection() async {
-    setState(() {
-      isDetecting = false;
-      yoloResults.clear();
-    });
-    // Không cần stopImageStream ở đây nếu chỉ tạm dừng xử lý,
-    // nhưng nếu chuyển trang thì nên để controller tự dispose hoặc pause.
-  }
-
-  // Hàm xử lý từng khung hình từ Camera
   Future<void> yoloOnFrame(CameraImage cameraImage) async {
     final result = await vision.yoloOnFrame(
       bytesList: cameraImage.planes.map((plane) => plane.bytes).toList(),
@@ -122,77 +158,81 @@ class _ScanScreenState extends State<ScanScreen> {
     }
   }
 
-  // --- HÀM TÌM KIẾM CON VẬT (Thay thế cho hàm bị lỗi ở zoo_data) ---
   Animal? _findAnimalByLabel(String label) {
     try {
-      // Chuẩn hóa chuỗi: về chữ thường và bỏ khoảng trắng thừa
       final cleanLabel = label.toLowerCase().trim();
-
-      // Tìm trong danh sách zooAnimals được import từ zoo_data.dart
       return zooAnimals.firstWhere(
         (animal) => animal.id.toLowerCase() == cleanLabel,
       );
     } catch (e) {
-      // Không tìm thấy
       return null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Màn hình chờ khi đang khởi tạo
+    // 1. Giao diện chưa có quyền
+    if (!_isPermissionGranted) {
+      return _buildPermissionRequestUI();
+    }
+
+    // 2. Giao diện đang load
     if (!isLoaded || !isCameraInitialized) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: Colors.green),
-              SizedBox(height: 10),
-              Text("Đang khởi động Camera AI...",
-                  style: TextStyle(color: Colors.white)),
-            ],
-          ),
-        ),
+            child: CircularProgressIndicator(
+          color: Colors.greenAccent,
+        )),
       );
     }
 
+    // 3. Giao diện chính
+    final Size size = MediaQuery.of(context).size;
+
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Camera Preview
+          // A. Camera Preview
           CameraPreview(controller),
 
-          // 2. Các khung nhận diện (Bounding Boxes)
-          ...displayBoxesAroundRecognizedObjects(MediaQuery.of(context).size),
+          // B. Hiệu ứng quét (Scanning Line)
+          _buildScanningAnimation(size),
 
-          // 3. Hướng dẫn UI
+          // C. Các khung nhận diện
+          ..._buildBoundingBoxes(size),
+
+          // D. Hướng dẫn UI (Trên cùng)
           Positioned(
-            top: 50,
+            top: 60,
             left: 20,
             right: 20,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.black45,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.center_focus_weak, color: Colors.white),
-                  SizedBox(width: 10),
-                  Text(
-                    "Quét con vật để nhận diện",
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ],
+            child: Center(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.center_focus_weak,
+                        color: Colors.greenAccent, size: 20),
+                    SizedBox(width: 10),
+                    Text(
+                      "Di chuyển camera để quét",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -201,30 +241,89 @@ class _ScanScreenState extends State<ScanScreen> {
     );
   }
 
-  // Hàm vẽ khung chữ nhật bao quanh vật thể
-  List<Widget> displayBoxesAroundRecognizedObjects(Size screen) {
+  Widget _buildPermissionRequestUI() {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.camera_alt_outlined, size: 80, color: Colors.grey),
+            const SizedBox(height: 20),
+            const Text(
+              "Cần quyền Camera để khám phá sở thú",
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.greenAccent,
+                  foregroundColor: Colors.black),
+              onPressed: () async {
+                if (await Permission.camera.isPermanentlyDenied) {
+                  openAppSettings();
+                } else {
+                  _checkPermission();
+                }
+              },
+              child: const Text("Cấp quyền ngay"),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Hiệu ứng thanh quét chạy dọc màn hình
+  Widget _buildScanningAnimation(Size size) {
+    return AnimatedBuilder(
+      animation: _scanAnimationController,
+      builder: (context, child) {
+        return Positioned(
+          top: _scanAnimationController.value * size.height,
+          left: 0,
+          right: 0,
+          child: Container(
+            height: 2,
+            decoration: BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.greenAccent.withValues(alpha: 0.5),
+                    blurRadius: 10)
+              ],
+              gradient: LinearGradient(
+                colors: [
+                  Colors.greenAccent.withValues(alpha: 0),
+                  Colors.greenAccent,
+                  Colors.greenAccent.withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Vẽ các khung nhận diện đẹp hơn
+  List<Widget> _buildBoundingBoxes(Size screen) {
     if (yoloResults.isEmpty || cameraImage == null) return [];
 
-    // Tính toán tỉ lệ để vẽ khung chính xác trên màn hình
     double factorX = screen.width / (cameraImage!.height);
     double factorY = screen.height / (cameraImage!.width);
 
     return yoloResults.map((result) {
-      // Lấy tọa độ
       double left = result["box"][0] * factorX;
       double top = result["box"][1] * factorY;
       double right = result["box"][2] * factorX;
       double bottom = result["box"][3] * factorY;
 
-      // Lấy tên nhãn (tag) từ AI
       String label = result['tag'];
-
-      // Tìm con vật trong dữ liệu của mình
       Animal? detectedAnimal = _findAnimalByLabel(label);
 
-      // Màu sắc khung: Xanh lá (nếu có trong dữ liệu), Vàng (nếu lạ)
-      Color boxColor =
-          detectedAnimal != null ? Colors.greenAccent : Colors.yellowAccent;
+      // Màu sắc: Xanh lá nếu tìm thấy, Vàng cam nếu chưa rõ
+      Color mainColor =
+          detectedAnimal != null ? Colors.greenAccent : Colors.orangeAccent;
 
       return Positioned(
         left: left,
@@ -233,11 +332,8 @@ class _ScanScreenState extends State<ScanScreen> {
         height: bottom - top,
         child: GestureDetector(
           onTap: () {
-            // LOGIC KHI BẤM VÀO KHUNG
             if (detectedAnimal != null) {
-              // Tạm dừng detect
               isDetecting = false;
-
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -245,57 +341,73 @@ class _ScanScreenState extends State<ScanScreen> {
                       AnimalDetailScreen(animal: detectedAnimal),
                 ),
               ).then((_) {
-                // Tiếp tục detect khi quay lại
                 isDetecting = true;
-                // Nếu camera bị dừng stream thì start lại (tuỳ device)
                 if (!controller.value.isStreamingImages) {
                   startDetection();
                 }
               });
             } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      "Phát hiện '$label' nhưng chưa có thông tin chi tiết!"),
-                  duration: const Duration(seconds: 1),
-                ),
-              );
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text("Chưa có thông tin về '$label'"),
+                duration: const Duration(seconds: 1),
+                backgroundColor: Colors.orange,
+              ));
             }
           },
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10.0),
-              border: Border.all(color: boxColor, width: 3.0),
-            ),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  top: -25, // Đẩy nhãn lên trên khung
-                  left: 0,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: boxColor,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(8),
-                        topRight: Radius.circular(8),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // 1. Khung viền bo tròn, nền mờ
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: mainColor, width: 2.5),
+                  color: mainColor.withValues(alpha: 0.15), // Nền mờ bên trong
+                ),
+              ),
+
+              // 2. Thẻ tên (Pill Shape)
+              Positioned(
+                top: -40, // Đẩy lên trên khung
+                left: 0,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: mainColor,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      )
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        detectedAnimal != null
+                            ? Icons.pets
+                            : Icons.help_outline,
+                        size: 16,
+                        color: Colors.black87,
                       ),
-                    ),
-                    child: Text(
-                      // Nếu tìm thấy thì hiện tên tiếng Việt, không thì hiện tên gốc
-                      detectedAnimal?.name ?? label,
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                      const SizedBox(width: 6),
+                      Text(
+                        detectedAnimal?.name ?? label.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );

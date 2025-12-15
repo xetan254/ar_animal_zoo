@@ -4,7 +4,7 @@ import 'package:ar_animal_zoo/screens/search_screen.dart';
 import 'package:ar_animal_zoo/screens/news_detail_screen.dart';
 import 'package:ar_animal_zoo/screens/animal_detail_screen.dart';
 import 'package:ar_animal_zoo/data/zoo_data.dart';
-import 'package:geolocator/geolocator.dart'; // Import thư viện định vị
+import 'package:geolocator/geolocator.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,32 +14,25 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // ✅ SỬA 1: Đổi kiểu dữ liệu từ List<Map> sang List<Animal>
-  late Future<List<Animal>> _featuredAnimalsFuture;
   late Future<Map<String, dynamic>?> _weatherFuture;
+
+  // Không cần biến Future cho Animals nữa vì sẽ dùng Stream trực tiếp
 
   @override
   void initState() {
     super.initState();
-    // Bây giờ kiểu dữ liệu đã khớp với hàm trong Service
-    _featuredAnimalsFuture = FirebaseService().getFeaturedAnimals();
     _weatherFuture = _determinePositionAndFetchWeather();
   }
 
-  // Hàm xin quyền và lấy vị trí
   Future<Map<String, dynamic>?> _determinePositionAndFetchWeather() async {
-    bool serviceEnabled;
     LocationPermission permission;
 
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      return FirebaseService().fetchWeather(21.0285, 105.8542);
-    }
-
+    // ✅ BƯỚC 1: Hỏi quyền TRƯỚC (để App luôn hiện popup xin quyền dù GPS đang tắt)
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
+        // Nếu người dùng từ chối -> Trả về mặc định (Hà Nội)
         return FirebaseService().fetchWeather(21.0285, 105.8542);
       }
     }
@@ -48,14 +41,30 @@ class _HomeScreenState extends State<HomeScreen> {
       return FirebaseService().fetchWeather(21.0285, 105.8542);
     }
 
-    Position position = await Geolocator.getCurrentPosition();
-    return FirebaseService()
-        .fetchWeather(position.latitude, position.longitude);
+    // ✅ BƯỚC 2: Kiểm tra GPS (Service) sau khi đã có quyền
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      // Nếu GPS tắt -> Trả về mặc định ngay (không để treo App)
+      debugPrint("GPS đang tắt, dùng vị trí mặc định.");
+      return FirebaseService().fetchWeather(21.0285, 105.8542);
+    }
+
+    // ✅ BƯỚC 3: Lấy vị trí với Timeout (Tránh đợi quá lâu)
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        // Chỉ đợi tối đa 5 giây, nếu không được thì dùng mặc định
+        timeLimit: const Duration(seconds: 5),
+      );
+      return FirebaseService()
+          .fetchWeather(position.latitude, position.longitude);
+    } catch (e) {
+      debugPrint("Lỗi/Timeout lấy vị trí: $e");
+      return FirebaseService().fetchWeather(21.0285, 105.8542);
+    }
   }
 
   Future<void> _refreshData() async {
     setState(() {
-      _featuredAnimalsFuture = FirebaseService().getFeaturedAnimals();
       _weatherFuture = _determinePositionAndFetchWeather();
     });
   }
@@ -89,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 20),
               _buildSectionTitle(
                   'Động vật nổi bật', Icons.favorite, Colors.redAccent),
-              _buildFeaturedAnimals(),
+              _buildFeaturedAnimals(), // Widget này đã được sửa thành StreamBuilder
               const SizedBox(height: 20),
               _buildSectionTitle(
                   'Tin tức mới nhất', Icons.newspaper, Colors.blueAccent),
@@ -117,7 +126,118 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- WIDGET THỜI TIẾT ---
+  // --- WIDGET THÚ NỔI BẬT (ĐÃ SỬA DÙNG STREAM) ---
+  Widget _buildFeaturedAnimals() {
+    return SizedBox(
+      height: 220,
+      // ✅ THAY ĐỔI QUAN TRỌNG: Dùng StreamBuilder thay vì FutureBuilder
+      // Để lắng nghe thay đổi Real-time từ Firebase
+      child: StreamBuilder<List<Animal>>(
+        stream: FirebaseService()
+            .getAnimalsStream(), // Lấy luồng dữ liệu toàn bộ thú
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text("Lỗi tải dữ liệu"));
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final allAnimals = snapshot.data ?? [];
+          if (allAnimals.isEmpty) {
+            return const Center(child: Text("Chưa có dữ liệu"));
+          }
+
+          // ✅ Xử lý logic lọc Top 6 ngay tại đây (Client-side Sorting)
+          // 1. Sắp xếp giảm dần theo lượt thích
+          allAnimals.sort((a, b) => b.favoriteCount.compareTo(a.favoriteCount));
+
+          // 2. Lấy 6 con đầu tiên
+          final featuredAnimals = allAnimals.take(6).toList();
+
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.only(left: 20),
+            itemCount: featuredAnimals.length,
+            itemBuilder: (context, index) =>
+                _buildAnimalCard(featuredAnimals[index]),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAnimalCard(Animal animal) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => AnimalDetailScreen(animal: animal)));
+      },
+      child: Container(
+        width: 160,
+        margin: const EdgeInsets.only(right: 15, bottom: 5, top: 5),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.grey.withValues(alpha: 0.15),
+                blurRadius: 8,
+                offset: const Offset(2, 3))
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(15)),
+              child: (animal.imagePath.startsWith('http'))
+                  ? Image.network(animal.imagePath,
+                      height: 120,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          Container(height: 120, color: Colors.grey[200]))
+                  : Image.asset(animal.imagePath,
+                      height: 120,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          Container(height: 120, color: Colors.grey[200])),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(animal.name,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 5),
+                  Row(children: [
+                    const Icon(Icons.favorite,
+                        color: Colors.redAccent, size: 14),
+                    const SizedBox(width: 4),
+                    // Số lượng tim sẽ tự nhảy khi Stream cập nhật
+                    Text('${animal.favoriteCount}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12))
+                  ]),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- WIDGET THỜI TIẾT (GIỮ NGUYÊN) ---
   Widget _buildWeatherCard() {
     return FutureBuilder<Map<String, dynamic>?>(
       future: _weatherFuture,
@@ -203,107 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- WIDGET THÚ NỔI BẬT ---
-  Widget _buildFeaturedAnimals() {
-    return SizedBox(
-      height: 220,
-      // ✅ SỬA 2: Sử dụng FutureBuilder<List<Animal>>
-      child: FutureBuilder<List<Animal>>(
-        future: _featuredAnimalsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final animals = snapshot.data ?? [];
-          if (animals.isEmpty) {
-            return const Center(child: Text("Chưa có dữ liệu"));
-          }
-          return ListView.builder(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.only(left: 20),
-            itemCount: animals.length,
-            // Truyền đối tượng Animal trực tiếp vào hàm build card
-            itemBuilder: (context, index) => _buildAnimalCard(animals[index]),
-          );
-        },
-      ),
-    );
-  }
-
-  // ✅ SỬA 3: Tham số nhận vào là Animal, không phải Map
-  Widget _buildAnimalCard(Animal animal) {
-    return GestureDetector(
-      onTap: () {
-        // ✅ SỬA 4: Chuyển trang trực tiếp bằng object animal
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => AnimalDetailScreen(animal: animal)));
-      },
-      child: Container(
-        width: 160,
-        margin: const EdgeInsets.only(right: 15, bottom: 5, top: 5),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.grey.withValues(alpha: 0.15),
-                blurRadius: 8,
-                offset: const Offset(2, 3))
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(15)),
-              // ✅ SỬA 5: Kiểm tra ảnh online hay offline để hiển thị đúng Widget
-              child: (animal.imagePath.startsWith('http'))
-                  ? Image.network(animal.imagePath,
-                      height: 120,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          Container(height: 120, color: Colors.grey[200]))
-                  : Image.asset(animal.imagePath,
-                      height: 120,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          Container(height: 120, color: Colors.grey[200])),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ✅ SỬA 6: Dùng thuộc tính của class Animal
-                  Text(animal.name,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 5),
-                  Row(children: [
-                    const Icon(Icons.favorite,
-                        color: Colors.redAccent, size: 14),
-                    const SizedBox(width: 4),
-                    Text('${animal.favoriteCount}',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12))
-                  ]),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- WIDGET TIN TỨC ---
+  // --- WIDGET TIN TỨC (GIỮ NGUYÊN) ---
   Widget _buildNewsSection() {
     return StreamBuilder<List<NewsArticle>>(
       stream: FirebaseService().getNewsStream(),
