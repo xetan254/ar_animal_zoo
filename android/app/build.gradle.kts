@@ -9,7 +9,6 @@ plugins {
 }
 
 // --- FIX QUAN TRỌNG: LOẠI BỎ FLATBUFFERS TRÙNG LẶP ---
-// Đoạn này bảo Gradle: "Đừng tải file flatbuffers riêng lẻ nữa, hãy dùng cái có sẵn trong AR"
 configurations.all {
     exclude(group = "com.google.flatbuffers", module = "flatbuffers-java")
 }
@@ -94,4 +93,5 @@ flutter {
 
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
+    implementation("com.google.ar:core:1.43.0")
 }

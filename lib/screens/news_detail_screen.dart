@@ -99,8 +99,7 @@ class NewsDetailScreen extends StatelessWidget {
                   // Nội dung chi tiết (Giả sử NewsArticle có trường 'description' hoặc bạn dùng nội dung giả)
                   // Lưu ý: Nếu model NewsArticle của bạn dùng tên biến khác (ví dụ 'content'), hãy sửa lại ở đây.
                   Text(
-                    // Nếu chưa có nội dung, hiển thị placeholder
-                    "Đây là nội dung chi tiết của bài viết. Hiện tại dữ liệu mẫu chưa có nội dung dài nên dòng này được hiển thị thay thế. \n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+                    article.content,
                     style: GoogleFonts.roboto(
                       fontSize: 16,
                       height: 1.8,

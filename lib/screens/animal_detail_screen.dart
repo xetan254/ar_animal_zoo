@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Để dùng MethodChannel
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_fonts/google_fonts.dart'; // Import font
+import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart'; // Để mở CH Play
 import '../data/zoo_data.dart';
 import '../services/firebase_service.dart';
 import 'ar_screen.dart';
@@ -19,6 +21,9 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
   bool isLoading = true;
   late int _currentFavoriteCount;
   final FirebaseService _firebaseService = FirebaseService();
+
+  // Kênh giao tiếp với code Native (Kotlin)
+  static const platform = MethodChannel('com.example.ar_animal_zoo/ar_check');
 
   @override
   void initState() {
@@ -83,6 +88,75 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
         isFavorite = !isFavorite;
         isFavorite ? _currentFavoriteCount++ : _currentFavoriteCount--;
       });
+    }
+  }
+
+  // --- HÀM KIỂM TRA VÀ MỞ AR ---
+  Future<void> _checkAndOpenAR() async {
+    try {
+      // 1. Gọi code Kotlin để kiểm tra
+      final bool isInstalled = await platform.invokeMethod('isARCoreInstalled');
+
+      if (!mounted) return;
+
+      if (isInstalled) {
+        // 2. Nếu đã cài, vào màn hình AR bình thường
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => ARScreen(animal: widget.animal)));
+      } else {
+        // 3. Nếu chưa cài, hiện thông báo
+        _showInstallDialog();
+      }
+    } on PlatformException catch (e) {
+      debugPrint("Lỗi kiểm tra AR: '${e.message}'.");
+      // Nếu lỗi (ví dụ chạy trên iOS hoặc máy quá cũ), cứ thử mở đại
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => ARScreen(animal: widget.animal)));
+    }
+  }
+
+  void _showInstallDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Yêu cầu ARCore",
+            style: GoogleFonts.roboto(fontWeight: FontWeight.bold)),
+        content: Text(
+            "Để xem chế độ thực tế ảo (AR), thiết bị của bạn cần cài đặt 'Google Play Services for AR'.",
+            style: GoogleFonts.roboto()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child:
+                Text("Để sau", style: GoogleFonts.roboto(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _openStore();
+            },
+            child: Text("Tải ngay",
+                style: GoogleFonts.roboto(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openStore() async {
+    // Link trực tiếp đến ARCore trên CH Play
+    final Uri url = Uri.parse(
+        "https://play.google.com/store/apps/details?id=com.google.ar.core");
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Không thể mở cửa hàng ứng dụng")));
+      }
     }
   }
 
@@ -210,10 +284,8 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen> {
               offset: const Offset(0, -5))
         ]),
         child: ElevatedButton.icon(
-          onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => ARScreen(animal: widget.animal))),
+          // SỬA: Gọi hàm kiểm tra thay vì push trực tiếp
+          onPressed: _checkAndOpenAR,
           icon: const Icon(Icons.view_in_ar),
           label: Text('Xem mô hình AR 3D',
               style: GoogleFonts.roboto(

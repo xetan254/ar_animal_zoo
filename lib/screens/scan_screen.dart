@@ -265,6 +265,39 @@ class _ScanScreenState extends State<ScanScreen>
           // 3. Khung bao (Bounding Boxes)
           ..._buildBoundingBoxes(size),
 
+          // --- PHẦN THÊM MỚI: TIÊU ĐỀ TRÊN CÙNG ---
+          Positioned(
+            top: 50, // Đặt thấp hơn status bar
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.3), // Nền mờ nhẹ
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  "Quét động vật trong sở thú",
+                  style: GoogleFonts.roboto(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    shadows: [
+                      const Shadow(
+                        blurRadius: 4,
+                        color: Colors.black,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // ----------------------------------------
+
           // 4. Các nút điều khiển
           _buildControls(),
         ],
