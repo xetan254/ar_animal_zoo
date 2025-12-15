@@ -17,7 +17,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
   @override
   void initState() {
     super.initState();
-    // API KEY của bạn
+    // API KEY
     const apiKey = '';
 
     _model = GenerativeModel(
@@ -25,10 +25,6 @@ class _AIChatScreenState extends State<AIChatScreen> {
       apiKey: apiKey,
       systemInstruction: Content.system(
           "Bạn là hướng dẫn viên sở thú thân thiện. Hãy trả lời câu hỏi về động vật một cách ngắn gọn, súc tích (khoảng 2-3 câu). Không trả lời dài dòng."),
-      generationConfig: GenerationConfig(
-        maxOutputTokens: 150,
-        temperature: 0.7,
-      ),
       safetySettings: [
         SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
         SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
@@ -62,10 +58,9 @@ class _AIChatScreenState extends State<AIChatScreen> {
       // Bắt lỗi cụ thể để dễ sửa
       String errorMessage = "Đã xảy ra lỗi.";
       if (e.toString().contains("not found")) {
-        errorMessage = "Model không tìm thấy. Hãy thử đổi sang 'gemini-pro'.";
+        errorMessage = "Model không tìm thấy..";
       } else if (e.toString().contains("User location is not supported")) {
-        errorMessage =
-            "Vị trí của bạn chưa hỗ trợ AI này (Cần Fake IP hoặc đổi Region).";
+        errorMessage = "Vị trí của bạn chưa hỗ trợ AI này.";
       } else {
         errorMessage = "Lỗi: ${e.toString()}";
       }

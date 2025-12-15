@@ -58,9 +58,21 @@ subprojects {
 
 // Hàm cấu hình Java/Kotlin chung để code gọn gàng hơn
 fun configureSubproject(project: Project) {
-    // ÉP ĐỒNG BỘ JAVA 17 CHO CẢ JAVA VÀ KOTLIN
     val android = project.extensions.findByName("android")
     if (android != null) {
+        // --- FIX LỖI: android:attr/lStar not found ---
+        // Ép tất cả các plugin (ar_flutter_plugin, flutter_vision...) dùng compileSdk 36
+        try {
+            // Sử dụng reflection để gọi setCompileSdkVersion vì mỗi plugin có class android khác nhau
+            val setCompileSdkMethod = android.javaClass.getMethod("setCompileSdkVersion", Int::class.javaPrimitiveType)
+            setCompileSdkMethod.invoke(android, 36)
+            println("   ✅ ${project.name}: Đã ép compileSdk = 36")
+        } catch (e: Exception) {
+             println("   ⚠️ Không thể set compileSdk cho ${project.name}: ${e.message}")
+        }
+        // ----------------------------------------------
+
+        // ÉP ĐỒNG BỘ JAVA 17 CHO CẢ JAVA VÀ KOTLIN
         try {
             val compileOptions = android.javaClass.getMethod("getCompileOptions").invoke(android)
             compileOptions.javaClass.getMethod("setSourceCompatibility", JavaVersion::class.java).invoke(compileOptions, JavaVersion.VERSION_17)

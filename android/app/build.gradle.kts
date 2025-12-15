@@ -54,16 +54,24 @@ android {
         multiDexEnabled = true 
     }
 
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a") // Chỉ giữ lại kiến trúc cho điện thoại thật
+            isUniversalApk = false // Không tạo file APK gộp (quá nặng)
+        }
+    }
+
     buildTypes {
         release {
-            // --- TỐI ƯU HÓA DUNG LƯỢNG APK (QUAN TRỌNG) ---
-            isMinifyEnabled = true  // Bật R8 để xóa code thừa và đổi tên biến cho gọn
-            isShrinkResources = true // Quét và xóa các file ảnh/layout không dùng đến
+            isMinifyEnabled = false  
+            isShrinkResources = false
             
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+           // proguardFiles(
+                //getDefaultProguardFile("proguard-android-optimize.txt"),
+                //"proguard-rules.pro"
+          //  )
             // -----------------------------------------------
             
             // Lưu ý: Dùng signingConfig debug để test bản release dễ dàng. 
