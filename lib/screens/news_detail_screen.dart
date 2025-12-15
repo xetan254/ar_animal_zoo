@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/firebase_service.dart';
 
 class NewsDetailScreen extends StatelessWidget {
@@ -9,64 +10,105 @@ class NewsDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: CustomScrollView(
         slivers: [
-          // Hiệu ứng ảnh bìa co giãn khi cuộn
+          // 1. Ảnh bìa co giãn (SliverAppBar)
           SliverAppBar(
-            expandedHeight: 250.0,
+            expandedHeight: 300,
             pinned: true,
             backgroundColor: Colors.green,
             flexibleSpace: FlexibleSpaceBar(
               background: Image.network(
                 article.imageUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (ctx, err, stack) => Container(
-                    color: Colors.grey[300],
-                    child:
-                        const Center(child: Icon(Icons.image_not_supported))),
+                errorBuilder: (_, __, ___) => Container(
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.broken_image,
+                      size: 50, color: Colors.grey),
+                ),
+              ),
+            ),
+            leading: Container(
+              margin: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: Colors.black26,
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
               ),
             ),
           ),
 
-          // Nội dung bài viết
+          // 2. Nội dung bài viết
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(20.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Tiêu đề
                   Text(
                     article.title,
-                    style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.bold, height: 1.3),
+                    style: GoogleFonts.roboto(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      height: 1.3,
+                      color: Colors.black87,
+                    ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 16),
 
-                  // Metadata
+                  // Thông tin tác giả & ngày đăng
                   Row(
                     children: [
-                      const Icon(Icons.calendar_today,
-                          size: 14, color: Colors.grey),
-                      const SizedBox(width: 5),
-                      Text(article.date,
-                          style: const TextStyle(color: Colors.grey)),
-                      const Spacer(),
-                      const Icon(Icons.person, size: 14, color: Colors.grey),
-                      const SizedBox(width: 5),
-                      Text(article.author,
-                          style: const TextStyle(color: Colors.grey)),
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: Colors.green.shade100,
+                        child: const Icon(Icons.person,
+                            size: 18, color: Colors.green),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            article.author,
+                            style: GoogleFonts.roboto(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            article.date,
+                            style: GoogleFonts.roboto(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
-                  const Divider(height: 30, thickness: 1),
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 24),
 
-                  // Nội dung chính
+                  // Nội dung chi tiết (Giả sử NewsArticle có trường 'description' hoặc bạn dùng nội dung giả)
+                  // Lưu ý: Nếu model NewsArticle của bạn dùng tên biến khác (ví dụ 'content'), hãy sửa lại ở đây.
                   Text(
-                    article.content,
-                    style: const TextStyle(
-                        fontSize: 16, height: 1.6, color: Colors.black87),
+                    // Nếu chưa có nội dung, hiển thị placeholder
+                    "Đây là nội dung chi tiết của bài viết. Hiện tại dữ liệu mẫu chưa có nội dung dài nên dòng này được hiển thị thay thế. \n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+                    style: GoogleFonts.roboto(
+                      fontSize: 16,
+                      height: 1.8,
+                      color: Colors.black87,
+                    ),
+                    textAlign: TextAlign.justify,
                   ),
-
-                  const SizedBox(height: 50),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),

@@ -1,7 +1,7 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-// import 'services/firebase_service.dart';
+import 'package:google_fonts/google_fonts.dart'; // Import Google Fonts
 import 'screens/home_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/scan_screen.dart';
@@ -24,8 +24,17 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'AR Zoo',
       theme: ThemeData(
-        primarySwatch: Colors.green,
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.green,
+          brightness: Brightness.light,
+        ),
+        // Áp dụng font chữ toàn cục
+        textTheme: GoogleFonts.poppinsTextTheme(Theme.of(context).textTheme),
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 0,
+        ),
       ),
       home: const MainContainer(),
     );
@@ -52,21 +61,40 @@ class _MainContainerState extends State<MainContainer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Dùng IndexedStack để giữ trạng thái các trang
       body: IndexedStack(index: _currentIndex, children: _screens),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.green[700],
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Trang chủ'),
-          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Thư viện'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.center_focus_strong, size: 32), label: 'Scan'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.newspaper), label: 'Tin tức'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Cá nhân'),
+
+      // Nâng cấp lên NavigationBar (Material 3)
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        indicatorColor: Colors.green.shade200,
+        destinations: const [
+          NavigationDestination(
+            selectedIcon: Icon(Icons.home),
+            icon: Icon(Icons.home_outlined),
+            label: 'Trang chủ',
+          ),
+          NavigationDestination(
+            selectedIcon: Icon(Icons.local_library),
+            icon: Icon(Icons.local_library_outlined),
+            label: 'Thư viện',
+          ),
+          NavigationDestination(
+            selectedIcon: Icon(Icons.center_focus_strong),
+            icon: Icon(Icons.center_focus_strong_outlined),
+            label: 'Scan',
+          ),
+          NavigationDestination(
+            selectedIcon: Icon(Icons.newspaper),
+            icon: Icon(Icons.newspaper_outlined),
+            label: 'Tin tức',
+          ),
+          NavigationDestination(
+            selectedIcon: Icon(Icons.person),
+            icon: Icon(Icons.person_outline),
+            label: 'Cá nhân',
+          ),
         ],
       ),
     );
