@@ -1,10 +1,12 @@
 import 'dart:async';
-import 'dart:ui';
+import 'dart:io';
+import 'dart:ui' as ui; // Import dart:ui để decode ảnh
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter_vision/flutter_vision.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:google_fonts/google_fonts.dart'; // Import font
+import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart'; // Thêm image_picker
 import '../data/zoo_data.dart';
 import 'animal_detail_screen.dart';
 
@@ -17,6 +19,7 @@ class ScanScreen extends StatefulWidget {
 
 class _ScanScreenState extends State<ScanScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
+  // --- Camera & AI Variables ---
   late CameraController controller;
   late FlutterVision vision;
   late List<Map<String, dynamic>> yoloResults;
@@ -25,16 +28,26 @@ class _ScanScreenState extends State<ScanScreen>
   bool isLoaded = false;
   bool isDetecting = false;
   bool isCameraInitialized = false;
+
+  // --- Animation Variables ---
   late AnimationController _scanAnimationController;
+
+  // --- Image Picker Variables (Mới) ---
+  File? _pickedImage; // File ảnh từ thư viện
+  ui.Image? _decodedImage; // Ảnh đã decode để lấy kích thước thật
+  bool _isImageMode = false; // Chế độ xem ảnh hay xem camera
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Animation quét quét
     _scanAnimationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3), // Quét nhanh hơn chút
+      duration: const Duration(seconds: 3),
     )..repeat(reverse: true);
+
     _checkPermission();
   }
 
@@ -51,6 +64,17 @@ class _ScanScreenState extends State<ScanScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && !_isPermissionGranted) {
       _checkPermission();
+    } else if (state == AppLifecycleState.paused && isCameraInitialized) {
+      // Khi app ẩn đi, dừng camera nếu đang chạy
+      if (!_isImageMode) {
+        controller.stopImageStream();
+        isDetecting = false;
+      }
+    } else if (state == AppLifecycleState.resumed && isCameraInitialized) {
+      // Khi app hiện lại, bật lại camera nếu không ở chế độ xem ảnh
+      if (!_isImageMode && !controller.value.isStreamingImages) {
+        startDetection();
+      }
     }
   }
 
@@ -78,7 +102,10 @@ class _ScanScreenState extends State<ScanScreen>
           isCameraInitialized = true;
           yoloResults = [];
         });
-        startDetection();
+        // Chỉ bắt đầu detect camera nếu không ở chế độ xem ảnh
+        if (!_isImageMode) {
+          startDetection();
+        }
       }
     } catch (e) {
       debugPrint("Error initializing: $e");
@@ -105,7 +132,7 @@ class _ScanScreenState extends State<ScanScreen>
     setState(() => isDetecting = true);
     try {
       await controller.startImageStream((image) async {
-        if (isDetecting) {
+        if (isDetecting && !_isImageMode) {
           cameraImage = image;
           yoloOnFrame(image);
         }
@@ -115,6 +142,17 @@ class _ScanScreenState extends State<ScanScreen>
     }
   }
 
+  Future<void> stopDetection() async {
+    setState(() {
+      isDetecting = false;
+      yoloResults.clear();
+    });
+    if (controller.value.isStreamingImages) {
+      await controller.stopImageStream();
+    }
+  }
+
+  // --- Xử lý Detect trên Camera Frame ---
   Future<void> yoloOnFrame(CameraImage cameraImage) async {
     final result = await vision.yoloOnFrame(
       bytesList: cameraImage.planes.map((plane) => plane.bytes).toList(),
@@ -125,6 +163,68 @@ class _ScanScreenState extends State<ScanScreen>
       classThreshold: 0.5,
     );
     if (result.isNotEmpty && mounted) setState(() => yoloResults = result);
+  }
+
+  // --- Xử lý Detect trên Ảnh tĩnh (Mới) ---
+  Future<void> yoloOnImage() async {
+    if (_pickedImage == null) return;
+
+    // Đọc bytes từ file ảnh
+    final imageBytes = await _pickedImage!.readAsBytes();
+
+    // Decode để lấy kích thước thật của ảnh (dùng để tính toán khung bao)
+    final decodedImage = await decodeImageFromList(imageBytes);
+    setState(() {
+      _decodedImage = decodedImage;
+    });
+
+    final result = await vision.yoloOnImage(
+      bytesList: imageBytes,
+      imageHeight: decodedImage.height,
+      imageWidth: decodedImage.width,
+      iouThreshold: 0.4,
+      confThreshold: 0.4,
+      classThreshold: 0.5,
+    );
+
+    if (mounted) {
+      setState(() {
+        yoloResults = result;
+      });
+    }
+  }
+
+  // --- Hàm chọn ảnh từ thư viện ---
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        // 1. Dừng camera stream
+        await stopDetection();
+
+        setState(() {
+          _pickedImage = File(image.path);
+          _isImageMode = true; // Chuyển sang chế độ ảnh
+          yoloResults = []; // Xóa kết quả cũ
+        });
+
+        // 2. Chạy detect trên ảnh mới
+        await yoloOnImage();
+      }
+    } catch (e) {
+      debugPrint("Lỗi chọn ảnh: $e");
+    }
+  }
+
+  // --- Quay lại chế độ Camera ---
+  void _backToCamera() {
+    setState(() {
+      _isImageMode = false;
+      _pickedImage = null;
+      _decodedImage = null;
+      yoloResults = [];
+    });
+    startDetection();
   }
 
   Animal? _findAnimalByLabel(String label) {
@@ -145,6 +245,7 @@ class _ScanScreenState extends State<ScanScreen>
           backgroundColor: Colors.black,
           body: Center(child: CircularProgressIndicator(color: Colors.green)));
     }
+
     final Size size = MediaQuery.of(context).size;
 
     return Scaffold(
@@ -152,43 +253,82 @@ class _ScanScreenState extends State<ScanScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          CameraPreview(controller),
-          _buildScanningAnimation(size),
+          // 1. Lớp hiển thị: Camera hoặc Ảnh tĩnh
+          if (_isImageMode && _pickedImage != null)
+            Image.file(_pickedImage!, fit: BoxFit.contain)
+          else
+            CameraPreview(controller),
+
+          // 2. Hiệu ứng quét (Chỉ hiện khi dùng Camera)
+          if (!_isImageMode) _buildScanningAnimation(size),
+
+          // 3. Khung bao (Bounding Boxes)
           ..._buildBoundingBoxes(size),
-          Positioned(
-            top: 60,
-            left: 20,
-            right: 20,
-            child: Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(30),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 12, horizontal: 24),
-                    decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(color: Colors.white24)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.center_focus_weak,
-                            color: Colors.greenAccent, size: 20),
-                        const SizedBox(width: 10),
-                        Text("Di chuyển camera để quét",
-                            style: GoogleFonts.roboto(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  ),
+
+          // 4. Các nút điều khiển
+          _buildControls(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControls() {
+    return Positioned(
+      bottom: 30,
+      left: 20,
+      right: 20,
+      child: Column(
+        children: [
+          // Hướng dẫn
+          ClipRRect(
+            borderRadius: BorderRadius.circular(30),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: Colors.white24)),
+                child: Text(
+                  _isImageMode
+                      ? "Chế độ xem ảnh\n(Chạm vào để xem chi tiết)"
+                      : "Di chuyển camera để quét\n(Chạm vào để xem chi tiết)",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.roboto(color: Colors.white, fontSize: 14),
                 ),
               ),
             ),
           ),
+          const SizedBox(height: 20),
+
+          // Nút bấm
+          Row(
+            mainAxisAlignment:
+                MainAxisAlignment.spaceBetween, // Đẩy nút ra 2 bên
+            children: [
+              // Nút tải ảnh lên (Bên trái)
+              FloatingActionButton(
+                heroTag: "btnGallery",
+                backgroundColor: Colors.white.withValues(alpha: 0.8),
+                onPressed: _pickImageFromGallery,
+                child: const Icon(Icons.photo_library, color: Colors.black),
+              ),
+
+              // Nút quay lại camera (Bên phải - chỉ hiện khi đang xem ảnh)
+              if (_isImageMode)
+                FloatingActionButton(
+                  heroTag: "btnCam",
+                  backgroundColor: Colors.white,
+                  onPressed: _backToCamera,
+                  child: const Icon(Icons.videocam, color: Colors.black),
+                )
+              else
+                // Widget rỗng để giữ cân bằng layout nếu cần, hoặc để trống
+                const SizedBox(width: 56),
+            ],
+          )
         ],
       ),
     );
@@ -198,54 +338,17 @@ class _ScanScreenState extends State<ScanScreen>
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                    color: Colors.green[50], shape: BoxShape.circle),
-                child: Icon(Icons.camera_alt_rounded,
-                    size: 80, color: Colors.green[700]),
-              ),
-              const SizedBox(height: 30),
-              Text("Cần quyền Camera",
-                  style: GoogleFonts.roboto(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87)),
-              const SizedBox(height: 10),
-              Text("Ứng dụng cần sử dụng camera để nhận diện động vật bằng AI.",
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.roboto(
-                      color: Colors.grey[600], fontSize: 16)),
-              const SizedBox(height: 40),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12))),
-                  onPressed: () async {
-                    if (await Permission.camera.isPermanentlyDenied) {
-                      openAppSettings();
-                    } else {
-                      _checkPermission();
-                    }
-                  },
-                  child: Text("Cấp quyền ngay",
-                      style: GoogleFonts.roboto(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white)),
-                ),
-              )
-            ],
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.camera_alt, size: 80, color: Colors.grey),
+            const SizedBox(height: 20),
+            Text("Cần quyền truy cập Camera", style: GoogleFonts.roboto()),
+            ElevatedButton(
+              onPressed: _checkPermission,
+              child: Text("Cấp quyền", style: GoogleFonts.roboto()),
+            )
+          ],
         ),
       ),
     );
@@ -279,82 +382,129 @@ class _ScanScreenState extends State<ScanScreen>
     );
   }
 
+  // Xử lý tính toán vị trí khung bao
   List<Widget> _buildBoundingBoxes(Size screen) {
-    if (yoloResults.isEmpty || cameraImage == null) return [];
-    double factorX = screen.width / (cameraImage!.height);
-    double factorY = screen.height / (cameraImage!.width);
+    if (yoloResults.isEmpty) return [];
 
-    return yoloResults.map((result) {
-      double left = result["box"][0] * factorX;
-      double top = result["box"][1] * factorY;
-      double right = result["box"][2] * factorX;
-      double bottom = result["box"][3] * factorY;
-      String label = result['tag'];
-      Animal? detectedAnimal = _findAnimalByLabel(label);
-      Color mainColor =
-          detectedAnimal != null ? Colors.greenAccent : Colors.orangeAccent;
+    double factorX, factorY;
 
-      return Positioned(
-        left: left,
-        top: top,
-        width: right - left,
-        height: bottom - top,
-        child: GestureDetector(
-          onTap: () {
-            if (detectedAnimal != null) {
-              isDetecting = false;
-              Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) =>
-                              AnimalDetailScreen(animal: detectedAnimal)))
-                  .then((_) {
+    if (_isImageMode && _decodedImage != null) {
+      // Logic tính toán cho ẢNH TĨNH (BoxFit.contain)
+      double imgW = _decodedImage!.width.toDouble();
+      double imgH = _decodedImage!.height.toDouble();
+
+      // Tính toán tỷ lệ scale của ảnh khi hiển thị trên màn hình
+      double scale = (screen.width / imgW < screen.height / imgH)
+          ? screen.width / imgW
+          : screen.height / imgH;
+
+      double displayedW = imgW * scale;
+      double displayedH = imgH * scale;
+
+      // Tính khoảng trống (offset) do BoxFit.contain tạo ra
+      double offsetX = (screen.width - displayedW) / 2;
+      double offsetY = (screen.height - displayedH) / 2;
+
+      return yoloResults.map((result) {
+        // Tọa độ gốc từ YOLO
+        double x1 = result["box"][0];
+        double y1 = result["box"][1];
+        double x2 = result["box"][2];
+        double y2 = result["box"][3];
+
+        // Scale tọa độ
+        double left = x1 * scale + offsetX;
+        double top = y1 * scale + offsetY;
+        double width = (x2 - x1) * scale;
+        double height = (y2 - y1) * scale;
+
+        return _buildBoxWidget(left, top, width, height, result);
+      }).toList();
+    } else if (!_isImageMode && cameraImage != null) {
+      // Logic tính toán cho CAMERA
+      factorX = screen.width / (cameraImage!.height);
+      factorY = screen.height / (cameraImage!.width);
+
+      return yoloResults.map((result) {
+        double left = result["box"][0] * factorX;
+        double top = result["box"][1] * factorY;
+        double right = result["box"][2] * factorX;
+        double bottom = result["box"][3] * factorY;
+
+        return _buildBoxWidget(left, top, right - left, bottom - top, result);
+      }).toList();
+    }
+
+    return [];
+  }
+
+  // Widget hiển thị từng ô vuông
+  Widget _buildBoxWidget(double left, double top, double width, double height,
+      Map<String, dynamic> result) {
+    String label = result['tag'];
+    Animal? detectedAnimal = _findAnimalByLabel(label);
+    Color mainColor =
+        detectedAnimal != null ? Colors.greenAccent : Colors.orangeAccent;
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      child: GestureDetector(
+        onTap: () {
+          if (detectedAnimal != null) {
+            // Dừng detect khi chuyển màn hình
+            if (!_isImageMode) isDetecting = false;
+
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) =>
+                        AnimalDetailScreen(animal: detectedAnimal))).then((_) {
+              // Khi quay lại, bật lại detect
+              if (!_isImageMode) {
                 isDetecting = true;
                 if (!controller.value.isStreamingImages) startDetection();
-              });
-            }
-          },
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
+              }
+            });
+          }
+        },
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: mainColor, width: 2),
+                color: mainColor.withValues(alpha: 0.2),
+              ),
+            ),
+            Positioned(
+              top: -30,
+              left: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: mainColor, width: 2),
-                  color: mainColor.withValues(alpha: 0.1),
+                    color: mainColor, borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  children: [
+                    Icon(detectedAnimal != null ? Icons.pets : Icons.help,
+                        size: 14, color: Colors.black),
+                    const SizedBox(width: 4),
+                    Text(
+                        "${detectedAnimal?.name ?? label} ${(result['box'][4] * 100).toStringAsFixed(0)}%",
+                        style: GoogleFonts.roboto(
+                            color: Colors.black,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ],
                 ),
               ),
-              Positioned(
-                top: -35,
-                left: 0,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                      color: mainColor,
-                      borderRadius: BorderRadius.circular(16)),
-                  child: Row(
-                    children: [
-                      Icon(
-                          detectedAnimal != null
-                              ? Icons.pets
-                              : Icons.help_outline,
-                          size: 14,
-                          color: Colors.black),
-                      const SizedBox(width: 4),
-                      Text(detectedAnimal?.name ?? label.toUpperCase(),
-                          style: GoogleFonts.roboto(
-                              color: Colors.black,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-      );
-    }).toList();
+      ),
+    );
   }
 }

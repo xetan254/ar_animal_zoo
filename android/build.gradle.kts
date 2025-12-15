@@ -1,16 +1,19 @@
+// android/build.gradle.kts
+import java.util.Properties
+import java.io.FileInputStream
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // --- 1. KHỐI PLUGINS (THÊM MỚI VÀO ĐẦU FILE) ---
 plugins {
-    // Phiên bản Gradle cho Android (bạn có thể chỉnh version nếu project yêu cầu khác)
     id("com.android.application") version "8.11.1" apply false
     
     // Phiên bản Kotlin
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
-    // Plugin Google Services (Firebase) - ĐÂY LÀ CÁI BẠN CẦN
+    // Plugin Google Services (Firebase) 
     id("com.google.gms.google-services") version "4.4.0" apply false
 }
 
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 
 allprojects {
     repositories {
@@ -19,47 +22,61 @@ allprojects {
     }
 }
 
+// --- FIX QUAN TRỌNG: CẤU HÌNH LẠI ĐƯỜNG DẪN BUILD RA THƯ MỤC GỐC ---
+rootProject.layout.buildDirectory.value(rootProject.layout.projectDirectory.dir("../build"))
+
+subprojects {
+    project.layout.buildDirectory.value(rootProject.layout.buildDirectory.dir(project.name))
+}
+// -----------------------------------------------------
+
 val clean by tasks.registering(Delete::class) {
     delete(rootProject.layout.buildDirectory)
 }
 
-
 subprojects {
     val subProject = this
 
-    afterEvaluate {
-        // --- FIX 1: ÉP ĐỒNG BỘ JAVA 17 CHO CẢ JAVA VÀ KOTLIN ---
-        val android = subProject.extensions.findByName("android")
-        if (android != null) {
-            try {
-                val compileOptions = android.javaClass.getMethod("getCompileOptions").invoke(android)
-                compileOptions.javaClass.getMethod("setSourceCompatibility", JavaVersion::class.java).invoke(compileOptions, JavaVersion.VERSION_17)
-                compileOptions.javaClass.getMethod("setTargetCompatibility", JavaVersion::class.java).invoke(compileOptions, JavaVersion.VERSION_17)
-            } catch (e: Exception) {
-                 subProject.tasks.withType(JavaCompile::class.java).configureEach {
-                    sourceCompatibility = JavaVersion.VERSION_17.toString()
-                    targetCompatibility = JavaVersion.VERSION_17.toString()
-                }
-            }
-        }
-
-        subProject.tasks.withType(KotlinCompile::class.java).configureEach {
-            compilerOptions {
-                jvmTarget.set(JvmTarget.JVM_17)
-            }
+    // --- FIX LỖI "Already Evaluated": Kiểm tra trạng thái trước khi chạy ---
+    if (subProject.state.executed) {
+        configureSubproject(subProject)
+    } else {
+        subProject.afterEvaluate {
+            configureSubproject(subProject)
         }
     }
 
     // --- FIX 2: VÁ LỖI NAMESPACE CHO CÁC PLUGIN CŨ ---
-    
-    // CASE A: AR Flutter Plugin
     if (subProject.name == "ar_flutter_plugin") {
         applyFix(subProject, "io.carius.lars.ar_flutter_plugin", "io.carmine.ar_flutter_plugin")
     }
 
-    // CASE B: Flutter Vision
     if (subProject.name == "flutter_vision") {
         applyFix(subProject, "com.vladih.computer_vision.flutter_vision", "com.vladih.computer_vision.flutter_vision")
+    }
+}
+
+// Hàm cấu hình Java/Kotlin chung để code gọn gàng hơn
+fun configureSubproject(project: Project) {
+    // ÉP ĐỒNG BỘ JAVA 17 CHO CẢ JAVA VÀ KOTLIN
+    val android = project.extensions.findByName("android")
+    if (android != null) {
+        try {
+            val compileOptions = android.javaClass.getMethod("getCompileOptions").invoke(android)
+            compileOptions.javaClass.getMethod("setSourceCompatibility", JavaVersion::class.java).invoke(compileOptions, JavaVersion.VERSION_17)
+            compileOptions.javaClass.getMethod("setTargetCompatibility", JavaVersion::class.java).invoke(compileOptions, JavaVersion.VERSION_17)
+        } catch (e: Exception) {
+             project.tasks.withType(JavaCompile::class.java).configureEach {
+                sourceCompatibility = JavaVersion.VERSION_17.toString()
+                targetCompatibility = JavaVersion.VERSION_17.toString()
+            }
+        }
+    }
+
+    project.tasks.withType(KotlinCompile::class.java).configureEach {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
     }
 }
 
@@ -91,7 +108,7 @@ fun doFixLogic(project: Project, oldPackageName: String, newNamespace: String) {
             }
         }
     } catch (e: Exception) {
-        println("   ⚠️ Lỗi nhẹ khi sửa Manifest: $e")
+        // Ignored
     }
 
     // Bước B: Inject Namespace mới vào cấu hình build
@@ -103,6 +120,6 @@ fun doFixLogic(project: Project, oldPackageName: String, newNamespace: String) {
             println("   ✅ Đã set namespace mới: $newNamespace")
         }
     } catch (e: Exception) {
-        println("   ⚠️ Lỗi khi set namespace: $e")
+        // Ignored
     }
 }

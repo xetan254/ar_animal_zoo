@@ -57,11 +57,24 @@ android {
 
     buildTypes {
         release {
+            // --- TỐI ƯU HÓA DUNG LƯỢNG APK (QUAN TRỌNG) ---
+            isMinifyEnabled = true  // Bật R8 để xóa code thừa và đổi tên biến cho gọn
+            isShrinkResources = true // Quét và xóa các file ảnh/layout không dùng đến
+            
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            // -----------------------------------------------
+            
+            // Lưu ý: Dùng signingConfig debug để test bản release dễ dàng. 
+            // Khi publish lên Store nhớ cấu hình key thật.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
 
     aaptOptions {
+        // Không nén các file model để tránh lỗi đọc model lúc chạy app
         noCompress.add("tflite")
         noCompress.add("glb")
     }

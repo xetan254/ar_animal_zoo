@@ -30,7 +30,7 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         // Áp dụng font chữ toàn cục
-        textTheme: GoogleFonts.poppinsTextTheme(Theme.of(context).textTheme),
+        textTheme: GoogleFonts.robotoTextTheme(Theme.of(context).textTheme),
         appBarTheme: const AppBarTheme(
           centerTitle: true,
           elevation: 0,

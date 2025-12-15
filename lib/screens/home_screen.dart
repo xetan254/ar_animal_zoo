@@ -91,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     // Ảnh nền Banner (Chọn 1 ảnh đẹp từ assets)
                     Image.asset(
-                      'assets/images/banner.jpg',
+                      'assets/images/banner.png',
                       fit: BoxFit.cover,
                     ),
                     // Lớp phủ đen mờ để chữ dễ đọc hơn

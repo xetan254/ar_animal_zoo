@@ -45,6 +45,13 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^2.0.0
+  flutter_launcher_icons: ^0.13.1
+    
+flutter_launcher_icons:
+  android: "ic_launcher" # Tên file icon cho Android
+  ios: true 
+  image_path: "assets/images/ar_zoo_icon.png" 
+  min_sdk_android: 21 # Khuyến nghị để hỗ trợ adaptive icon tốt hơn trên Android mới
 
 flutter:
   uses-material-design: true
@@ -53,17 +60,3 @@ flutter:
     - assets/audio/
     - assets/tflite/
     - assets/images/
-    - assets/models/bear.glb
-    - assets/models/camel.glb
-    - assets/models/capybara.glb
-    - assets/models/elephant.glb
-    - assets/models/giraffe.glb
-    - assets/models/hyena.glb
-    - assets/models/lemur.glb
-    - assets/models/leopard.glb
-    - assets/models/panda.glb
-    - assets/models/rhino.glb
-    - assets/models/tiger.glb
-    - assets/models/turtle.glb
-    - assets/models/warthog.glb
-    - assets/models/zebra.glb
